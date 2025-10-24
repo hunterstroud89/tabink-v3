@@ -10,6 +10,83 @@ A Newton MessagePad-inspired PWA featuring notes, sketches, tasks, RSS feed read
 
 ---
 
+## 🚀 Developer Quick Reference
+
+### Build APK
+```bash
+cd /Applications/MAMP/htdocs/tabink-v3/cordova-build
+cordova build android
+cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ~/Desktop/tabink.apk
+```
+
+### Update App Icon or Splash Screen
+1. Replace files in `cordova-build/res/`:
+   - `app-icon.png` (512x512 recommended)
+   - `splash-screen.png` (1920x1920 recommended)
+2. Run build command above
+
+### Push Changes to GitHub
+```bash
+cd /Applications/MAMP/htdocs/tabink-v3
+git add .
+git commit -m "Your commit message"
+git push
+```
+
+### Test Locally
+```bash
+cd /Applications/MAMP/htdocs/tabink-v3
+python3 -m http.server 8000
+# Open http://localhost:8000
+```
+
+### View Live Website
+```
+https://hunterstroud89.github.io/tabink-v3/
+```
+
+### Important Paths
+- **Main project**: `/Applications/MAMP/htdocs/tabink-v3/`
+- **Build folder**: `/Applications/MAMP/htdocs/tabink-v3/cordova-build/`
+- **APK output**: `cordova-build/platforms/android/app/build/outputs/apk/debug/app-debug.apk`
+- **Config file**: `cordova-build/config.xml`
+
+### Environment Variables (already set)
+```bash
+ANDROID_HOME=$HOME/Library/Android/sdk
+JAVA_HOME=/opt/homebrew/opt/openjdk@17
+```
+
+### Common Tasks
+
+**Rebuild Android platform:**
+```bash
+cd cordova-build
+cordova platform remove android
+cordova platform add android
+cordova build android
+```
+
+**Update Cordova:**
+```bash
+npm update -g cordova
+```
+
+**Clean build cache:**
+```bash
+cd cordova-build
+rm -rf platforms/android/app/build
+cordova build android
+```
+
+**Check for errors:**
+```bash
+cd cordova-build
+cordova requirements
+```
+
+---
+
 ## ✨ Features
 
 ### 📝 Files App (Notes & Sketches)
@@ -442,6 +519,62 @@ Home screen widgets provide quick access:
 
 ## 🐛 Troubleshooting
 
+### APK Build Errors
+
+**"ANDROID_HOME not found"**
+```bash
+echo $ANDROID_HOME
+# Should show: /Users/hunter/Library/Android/sdk
+# If empty, add to ~/.zshrc:
+export ANDROID_HOME=$HOME/Library/Android/sdk
+export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools
+source ~/.zshrc
+```
+
+**"JAVA_HOME not found"**
+```bash
+echo $JAVA_HOME
+# Should show: /opt/homebrew/opt/openjdk@17
+# If empty:
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
+source ~/.zshrc
+```
+
+**"Build tools not found"**
+```bash
+sdkmanager --sdk_root=$ANDROID_HOME "build-tools;35.0.0"
+```
+
+**"Gradle build failed"**
+```bash
+cd cordova-build
+rm -rf platforms/android
+cordova platform add android
+cordova build android
+```
+
+### APK Won't Install on Fire Tablet
+
+1. Go to Settings → Security
+2. Enable "Apps from Unknown Sources"
+3. Or enable for specific app (Silk Browser, Files, etc.)
+4. Make sure you're installing the **signed** APK, not unsigned
+
+### Symlinks Not Working
+
+**Check if symlinks exist:**
+```bash
+ls -la /Applications/MAMP/htdocs/tabink-v3/cordova-build/www/
+```
+
+**Recreate symlinks:**
+```bash
+cd /Applications/MAMP/htdocs/tabink-v3/cordova-build
+rm -rf www && mkdir www && cd www
+ln -s ../../apps ../../assets ../../functions ../../lib ../../index.html ../../manifest.json .
+```
+
 ### Service Worker Not Updating
 
 ```javascript
@@ -466,11 +599,13 @@ navigator.serviceWorker.getRegistrations().then((registrations) => {
 
 **Issue**: CORS restrictions
 
-**Solution**: Use CORS proxy
-```javascript
-const proxyUrl = 'https://corsproxy.io/?';
-const feedUrl = proxyUrl + encodeURIComponent(feed.url);
-```
+**Solution**: Already implemented with 4 fallback methods in feed.html
+- Direct fetch
+- AllOrigins proxy
+- ThingProxy
+- RSS2JSON converter
+
+If still failing, feed URL may be dead - check default feeds in `apps/feed.html` line 120
 
 ### Storage Quota Exceeded
 
@@ -479,6 +614,19 @@ const feedUrl = proxyUrl + encodeURIComponent(feed.url);
 3. Clear completed tasks
 4. Delete old notes/sketches
 5. Run "Optimize Database"
+
+### App Shows System Bars on Fire Tablet
+
+**Issue**: Android status bar and navigation bar visible
+
+**Solution**: Already enabled in config.xml:
+```xml
+<preference name="Fullscreen" value="true" />
+```
+
+If still showing, Fire OS may override. Try:
+- Swipe down from top to hide status bar
+- Or accept it as Fire OS limitation
 
 ---
 
