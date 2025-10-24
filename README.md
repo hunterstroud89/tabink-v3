@@ -10,6 +10,31 @@ A Newton MessagePad-inspired PWA featuring notes, sketches, tasks, RSS feed read
 
 ---
 
+## 📑 Table of Contents
+
+### Quick Start
+- [Developer Quick Reference](#-developer-quick-reference) - Build, deploy, and common tasks
+- [Getting Started](#-getting-started) - First run and local development
+- [User Guide](#-user-guide) - How to use all app features
+
+### Development
+- [APK Deployment](#-apk-deployment) - Build Android APK with Cordova
+- [Architecture](#️-architecture) - Tech stack and project structure
+- [Database Schema](#-database-schema) - SQLite tables and structure
+- [Storage System](#️-storage-system) - IndexedDB and caching
+
+### Reference
+- [Features](#-features) - Complete feature list
+- [Configuration](#-configuration) - Manifest, service worker, RSS feeds
+- [Database Tools](#️-database-tools) - Cleanup and optimization
+- [Troubleshooting](#-troubleshooting) - Common issues and solutions
+- [Performance](#-performance) - App size and load times
+- [Privacy & Security](#-privacy--security) - Data handling
+- [Roadmap](#️-roadmap) - Planned features
+- [Support](#-support) - Getting help
+
+---
+
 ## 🚀 Developer Quick Reference
 
 ### Build APK
