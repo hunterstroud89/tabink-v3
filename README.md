@@ -63,8 +63,7 @@ A Newton MessagePad-inspired PWA featuring notes, sketches, tasks, RSS feed read
 ```
 tabink-v3/
 ├── index.html                    # Home page with widget dashboard
-├── manifest.json                 # PWA configuration
-├── service-worker.js             # Offline support & caching
+├── manifest.json                 # PWA configuration (for GitHub Pages)
 │
 ├── apps/                         # Individual app pages
 │   ├── files.html               # Files browser (notes & sketches)
@@ -80,21 +79,31 @@ tabink-v3/
 │       └── timer-widget.js      # Timer topbar widget
 │
 ├── assets/                      # Static assets
-│   ├── style.css               # Main CSS framework (1352 lines)
-│   └── icons/                  # SVG icon sprite & app icons
+│   ├── style.css               # Main CSS framework
+│   └── icons/                  # SVG icon sprite & PWA icons
 │       ├── icons.svg           # Feather icons sprite
-│       ├── icon-192.png        # PWA icon (192x192) [CREATE]
-│       └── icon-512.png        # PWA icon (512x512) [CREATE]
+│       ├── icon-192.png        # PWA icon (192x192)
+│       └── icon-512.png        # PWA icon (512x512)
 │
 ├── functions/                   # Core JavaScript modules
-│   ├── db.js                   # SQLite database wrapper (502 lines)
+│   ├── db.js                   # SQLite database wrapper
 │   ├── config.js               # App configuration
 │   ├── ui.js                   # UI utilities
-│   └── settings.js             # Settings management
+│   ├── settings.js             # Settings management
+│   └── service-worker.js       # Offline support & caching
 │
-└── lib/                        # Third-party libraries
-    ├── sql-wasm.js            # SQL.js loader
-    └── sql-wasm.wasm          # SQLite WebAssembly binary (~1 MB)
+├── lib/                        # Third-party libraries
+│   ├── sql-wasm.js            # SQL.js loader
+│   └── sql-wasm.wasm          # SQLite WebAssembly binary (~1 MB)
+│
+└── cordova-build/              # APK build environment
+    ├── config.xml              # Cordova configuration
+    ├── res/                    # App resources
+    │   ├── app-icon.png        # Android app icon
+    │   └── splash-screen.png   # Launch splash screen
+    ├── www/                    # Symlinked project files
+    └── platforms/
+        └── android/            # Generated Android project
 ```
 
 ---
@@ -271,54 +280,65 @@ The app will:
 
 ## 📱 APK Deployment
 
-### Prerequisites
+### Build APK with Cordova
 
-1. **Create App Icons** (Required)
-   - 192x192 PNG: `/assets/icons/icon-192.png`
-   - 512x512 PNG: `/assets/icons/icon-512.png`
-   - See: `ICON_CREATION_GUIDE.md`
+This project uses Apache Cordova to build native Android APKs with full offline support.
 
-2. **Test on HTTPS** (Required for PWA features)
-   - Service worker requires secure context
-   - Use localhost or deploy to HTTPS server
-
-### Build APK Using PWA Builder
-
-1. **Visit PWA Builder**
-   ```
-   https://www.pwabuilder.com/
-   ```
-
-2. **Upload or Enter URL**
-   - Option A: Enter hosted URL
-   - Option B: Upload project as ZIP
-
-3. **Configure Android Package**
-   - Package ID: `com.yourname.tabink`
-   - App name: `Tabink`
-   - Version: `1.0.0`
-   - Icon: Automatically detected from manifest
-
-4. **Download APK**
-   - Click "Build My PWA"
-   - Select "Android Package"
-   - Download signed APK
-
-5. **Install on Device**
-   ```bash
-   adb install tabink.apk
-   ```
-
-### Alternative: Capacitor
-
+**Quick Build:**
 ```bash
-npm install -g @capacitor/cli
-capacitor init Tabink com.yourname.tabink
-capacitor add android
-capacitor copy android
-capacitor open android
-# Build in Android Studio
+cd cordova-build
+cordova build android
+cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ~/Desktop/tabink.apk
 ```
+
+### Customize App Icon & Splash Screen
+
+Replace these files in `cordova-build/res/`:
+- **app-icon.png** - App launcher icon (512x512 recommended)
+- **splash-screen.png** - Launch screen (1920x1920 recommended)
+
+Changes take effect on next build - no code changes needed!
+
+### Configuration
+
+Edit `cordova-build/config.xml` to customize:
+- App name and version
+- Package ID (com.tabink.app)
+- Fullscreen mode
+- Splash screen duration
+- Android permissions
+
+### Install on Device
+
+**Method 1: USB Transfer**
+1. Copy `app-debug.apk` to device
+2. Open file and tap "Install"
+3. Enable "Install from Unknown Sources" if prompted
+
+**Method 2: ADB**
+```bash
+adb install ~/Desktop/tabink.apk
+```
+
+### Project Structure
+```
+cordova-build/
+├── config.xml          # Cordova configuration
+├── res/
+│   ├── app-icon.png    # Replace for custom icon
+│   └── splash-screen.png  # Replace for custom splash
+├── www/                # Symlinked to main project files
+│   ├── apps/          → ../../apps
+│   ├── assets/        → ../../assets
+│   ├── functions/     → ../../functions
+│   ├── lib/           → ../../lib
+│   ├── index.html     → ../../index.html
+│   └── manifest.json  → ../../manifest.json
+└── platforms/
+    └── android/        # Generated Android project
+```
+
+**Note:** The `www/` folder uses symlinks, so any changes to your main project files are automatically included in the next build!
 
 ---
 
