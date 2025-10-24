@@ -87,6 +87,201 @@ cordova requirements
 
 ---
 
+## 📖 User Guide
+
+### Getting Started
+
+**First Launch:**
+1. App automatically creates database and adds 9 default RSS feeds
+2. Home screen shows 4 widgets: Files, Tasks, Feed, Timer
+3. Tap any widget to open that app
+4. Timer widget stays in top bar (accessible from any screen)
+
+### Files App (Notes & Sketches)
+
+**Creating a Note:**
+1. Tap **Files** widget or app icon
+2. Tap **"+ New Note"**
+3. Start typing - first line becomes the title
+4. Auto-saves after you stop typing (500ms delay)
+5. Tap **"← Back"** to return to file browser
+
+**Creating a Sketch:**
+1. Open Files app
+2. Tap **"+ New Sketch"**
+3. Draw with your finger/stylus
+4. Tap **"Save"** when done
+5. Enter a title or keep auto-generated name
+
+**Opening from Widget:**
+- Tap any file in the Files widget to open it directly
+- Edit and it auto-saves
+- Tap "Open in Files ↗" to see full file browser
+
+**Organizing Files:**
+- Files shown in grid view (newest first)
+- Click file icon to open/edit
+- Delete button (trash icon) on each file
+- All files stored locally - no cloud sync
+
+### Tasks App
+
+**Adding Tasks:**
+1. Open Tasks app
+2. Type task in the text box
+3. Press Enter or tap **"+ Add Task"**
+4. Task appears in list with checkbox
+
+**Setting Due Dates:**
+1. Tap the calendar icon next to any task
+2. Select date from picker
+3. Date shows as "Today", "Tomorrow", or "3d" format
+4. No due date = checkbox only
+
+**Completing Tasks:**
+- Tap checkbox to mark complete
+- Completed tasks show with strikethrough
+- Tap **"Clear Completed"** to remove all done tasks
+
+**Widget Shortcuts:**
+- Home screen Tasks widget shows today's tasks only
+- Tap checkbox in widget to complete without opening app
+- Overdue tasks stay in widget until completed
+
+### Feed App (RSS Reader)
+
+**Adding Feeds:**
+1. Open Feed app
+2. Tap **"Manage Feeds"**
+3. Tap **"+ Add Feed"**
+4. Paste RSS feed URL (e.g., `https://example.com/feed.xml`)
+5. Tap **"Add"**
+
+**Reading Articles:**
+1. Feed widget shows latest 5 articles
+2. Tap article to open in popup
+3. Tap article title in popup to open full webpage
+4. Mark as read automatically when opened
+
+**Managing Articles:**
+- **Save**: Star icon saves article permanently (won't auto-delete)
+- **Mark as Read**: Eye icon marks without opening
+- **Delete**: Trash icon removes article
+- Auto-cleanup: Deletes read articles older than 30 days (saved articles protected)
+
+**Refreshing Feeds:**
+1. Open Feed app
+2. Tap **"↻ Refresh All Feeds"**
+3. Wait for success message
+4. New articles appear at top
+
+**Removing Feeds:**
+1. Tap **"Manage Feeds"**
+2. Tap **"Delete"** next to feed name
+3. Confirm deletion
+4. All articles from that feed are removed
+
+### Timer
+
+**Setting Timer:**
+1. Timer widget always visible in top bar
+2. Tap timer widget
+3. Enter minutes (e.g., "25" for 25 minutes)
+4. Tap **"Start"**
+5. Timer counts down in top bar
+
+**Using Timer:**
+- Works on any screen (stays in top bar)
+- Shows "5:00" format while running
+- Alarm sound plays when complete
+- Tap **"Stop"** to cancel early
+- Tap **"Reset"** to clear and start over
+
+### Settings
+
+**Theme Toggle:**
+- Tap **"Toggle Dark Mode"** to switch themes
+- Changes apply immediately
+- Setting saved to database
+
+**Storage Monitor:**
+- Shows database size (e.g., "0.44 MB")
+- Shows total storage available (e.g., "~1 GB")
+- Updates in real-time as you add/delete data
+
+**Export Database:**
+1. Tap **"Export Database"**
+2. File downloads as `tabink-backup-YYYY-MM-DD.db`
+3. Save to safe location (Dropbox, Google Drive, etc.)
+4. Use for backup or transferring to another device
+
+**Import Database:**
+1. Tap **"Import Database"**
+2. Select `.db` file from previous export
+3. Confirm replacement
+4. **Warning**: Overwrites all current data!
+5. Reload page to see imported data
+
+**Clear All Data:**
+- Deletes entire database
+- Cannot be undone
+- Use Export first if you want backup
+
+### Database App (Advanced)
+
+**Viewing Data:**
+- See all tables (tasks, notes, sketches, feeds, articles, settings)
+- Browse raw database content
+- Check database size and structure
+
+**Cleanup Tools:**
+1. **Add Example Data**: Populate with sample content for testing
+2. **Cleanup Old Articles**: Remove feed articles >30 days old
+3. **Clear All Articles**: Delete all RSS articles (keeps feeds)
+4. **Clear All Notes**: Delete all notes
+5. **Clear All Sketches**: Delete all sketches
+6. **Clear Completed Tasks**: Remove finished tasks only
+7. **Reset All Tasks**: Mark all tasks as incomplete
+8. **Optimize Database**: Run VACUUM to reclaim space
+
+**When to Use:**
+- Database feeling slow? Run "Optimize Database"
+- Too much storage used? Clear old articles
+- Testing? Add example data
+- Fresh start? Use individual clear buttons (safer than "Clear All Data")
+
+### Tips & Tricks
+
+**Offline Usage:**
+- All data stored locally - works without internet
+- RSS feeds require internet to refresh (but articles stay cached)
+- Install as APK for true offline app experience
+
+**Storage Management:**
+- Check Settings regularly to monitor storage
+- Sketches use most space (2-5 MB each)
+- Articles accumulate quickly (cleanup old ones)
+- Export database before major cleanup
+
+**Widgets:**
+- Home screen widgets update automatically
+- Tap widget items for quick actions (complete tasks, open notes)
+- Timer widget accessible from any app screen
+
+**Data Safety:**
+- Export database weekly if actively using
+- No cloud backup = device loss = data loss
+- Keep exports in multiple locations
+- Consider manual file exports for important notes
+
+**Performance:**
+- App loads in ~500ms from cache
+- Database queries typically <50ms
+- Sketches may lag on older tablets
+- Optimize database if queries slow down
+
+---
+
 ## ✨ Features
 
 ### 📝 Files App (Notes & Sketches)
