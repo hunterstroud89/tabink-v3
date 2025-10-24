@@ -7,8 +7,8 @@
   <title>Documentation</title>
   <link rel="stylesheet" href="../assets/style.css" />
   
-  <!-- Marked.js for Markdown parsing -->
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Marked.js for Markdown parsing (local copy for offline use) -->
+  <script src="../lib/marked.min.js"></script>
   
   <style>
     body {
@@ -181,14 +181,6 @@
   </div>
   
   <script>
-    // Configure marked.js options
-    marked.setOptions({
-      breaks: true,
-      gfm: true,
-      headerIds: true,
-      mangle: false
-    });
-    
     // Load and render README.md
     async function loadReadme() {
       try {
@@ -196,33 +188,50 @@
         if (!response.ok) throw new Error('Failed to load README.md');
         
         const markdown = await response.text();
-        const html = marked.parse(markdown);
         
-        document.getElementById('readmeContent').innerHTML = html;
+        // Configure marked.js with simple options
+        if (typeof marked !== 'undefined') {
+          marked.setOptions({
+            breaks: true,
+            gfm: true
+          });
+          
+          const html = marked.parse(markdown);
+          document.getElementById('readmeContent').innerHTML = html;
+        } else {
+          throw new Error('Marked.js library not loaded');
+        }
         
         // Fix internal anchor links (table of contents)
-        const links = document.querySelectorAll('#readmeContent a[href^="#"]');
-        links.forEach(link => {
-          link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const targetId = link.getAttribute('href').substring(1);
-            const targetElement = document.getElementById(targetId);
-            if (targetElement) {
-              targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              // Update URL hash without jumping
-              history.pushState(null, null, '#' + targetId);
-            }
+        setTimeout(() => {
+          const links = document.querySelectorAll('#readmeContent a[href^="#"]');
+          links.forEach(link => {
+            link.addEventListener('click', (e) => {
+              e.preventDefault();
+              const hash = link.getAttribute('href');
+              const targetId = hash.substring(1);
+              
+              // Find the heading with matching text
+              const headings = document.querySelectorAll('#readmeContent h1, #readmeContent h2, #readmeContent h3, #readmeContent h4');
+              let targetElement = null;
+              
+              headings.forEach(heading => {
+                const headingText = heading.textContent.toLowerCase().trim();
+                const linkText = targetId.toLowerCase().replace(/-/g, ' ').replace(/^[\s-]+/, '');
+                
+                if (headingText.includes(linkText) || linkText.includes(headingText.substring(0, 10))) {
+                  targetElement = heading;
+                }
+              });
+              
+              if (targetElement) {
+                targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                history.pushState(null, null, hash);
+              }
+            });
           });
-        });
+        }, 100);
         
-        // Scroll to hash if present on load
-        if (window.location.hash) {
-          setTimeout(() => {
-            const targetId = window.location.hash.substring(1);
-            const element = document.getElementById(targetId);
-            if (element) element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }, 200);
-        }
       } catch (error) {
         console.error('Error loading README:', error);
         document.getElementById('readmeContent').innerHTML = `
