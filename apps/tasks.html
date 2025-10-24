@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasks</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <script src="../lib/sql-wasm.js"></script>
+  <script src="../functions/db.js"></script>
+  <script src="../functions/config.js"></script>
+  <script src="../functions/settings.js"></script>
+</head>
+<body>
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-title" style="text-align: left;">
+      <a href="../index.html" style="color: inherit; text-decoration: none; opacity: 0.6;">Home</a>
+      <span style="opacity: 0.4; margin: 0 var(--space-xs);">/</span>
+      <span>Tasks</span>
+    </div>
+    <div class="topbar-actions">
+      <button id="clearBtn" onclick="clearCompletedTasks()">Clear Done</button>
+    </div>
+  </div>
+  
+  <!-- Main Content -->
+  <main class="container-narrow">
+    <input 
+      type="text" 
+      id="newTaskInput" 
+      placeholder="Add new task..."
+      autocomplete="off"
+      style="width: 100%; margin-bottom: var(--space-md);"
+    >
+    
+    <div id="taskList"></div>
+  </main>
+
+  <!-- Date Picker Popup -->
+  <div id="datePickerOverlay" class="popup-overlay" onclick="hidePopup()" style="display: none;"></div>
+  <div id="datePickerPopup" class="popup" style="display: none;">
+    <div class="popup-header">
+      <div style="display: flex; align-items: center; gap: var(--space-xs);">
+        <button onclick="changeMonth(-1)" style="padding: var(--space-xs) var(--space-sm); border: 2px solid var(--border-color); background: var(--bg-inset); cursor: pointer; border-radius: 3px; font-size: 1em; line-height: 1;">‹</button>
+        <h3 id="calendarMonth" class="popup-title bold" style="margin: 0;"></h3>
+        <button onclick="changeMonth(1)" style="padding: var(--space-xs) var(--space-sm); border: 2px solid var(--border-color); background: var(--bg-inset); cursor: pointer; border-radius: 3px; font-size: 1em; line-height: 1;">›</button>
+      </div>
+    </div>
+    <div class="popup-content" style="padding: var(--space-md);">
+      <div id="calendarGrid"></div>
+      <div style="display: flex; gap: var(--space-sm); margin-top: var(--space-md);">
+        <button onclick="clearTaskDate()">Clear Date</button>
+        <button onclick="hidePopup()" style="margin-left: auto;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const newTaskInput = document.getElementById('newTaskInput');
+    let currentTaskId = null;
+    let currentDate = new Date();
+    
+    // Initialize
+    window.addEventListener('DOMContentLoaded', async () => {
+      await db.init();
+      loadTasks();
+      newTaskInput.focus();
+    });
+
+    // Load and render tasks
+    async function loadTasks() {
+      const tasks = await db.getTasks();
+      const taskList = document.getElementById('taskList');
+      
+      if (tasks.length === 0) {
+        taskList.innerHTML = '<p style="text-align: center; padding: var(--space-xl); color: var(--text-secondary);">No tasks yet. Start typing above!</p>';
+        return;
+      }
+      
+      taskList.innerHTML = tasks.map(task => {
+        const textStyle = task.completed ? 'text-decoration: line-through; opacity: 0.5;' : '';
+        
+        let dateDisplay = '<span class="date-badge" style="cursor: pointer; opacity: 0.4;">+ date</span>';
+        if (task.dueDate) {
+          const style = task.completed ? 'cursor: pointer; opacity: 0.5;' : 'cursor: pointer;';
+          dateDisplay = `<span class="date-badge" style="${style}">${formatDate(task.dueDate)}</span>`;
+        }
+        
+        return `
+          <div class="card" style="margin-bottom: var(--space-sm);">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <input 
+                type="checkbox" 
+                id="task-${task.id}"
+                ${task.completed ? 'checked' : ''}
+                onchange="toggleTask('${task.id}')"
+              >
+              <label for="task-${task.id}" class="bold" style="flex: 1; cursor: pointer; margin: 0; ${textStyle}">${escapeHtml(task.text)}</label>
+              <span onclick="editTaskDate('${task.id}')">${dateDisplay}</span>
+              <button onclick="deleteTask('${task.id}')" style="background: var(--bg-inset); border: 2px solid var(--border-color); border-radius: 3px; cursor: pointer; color: var(--text-secondary); font-size: 1.2em; padding: 2px 6px; line-height: 1;">×</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Add task
+    async function addTask() {
+      const text = newTaskInput.value.trim();
+      if (!text) return;
+      
+      await db.addTask(text);
+      await loadTasks();
+      
+      newTaskInput.value = '';
+      newTaskInput.focus();
+    }
+
+    // Toggle task completion
+    async function toggleTask(taskId) {
+      const tasks = await db.getTasks();
+      const task = tasks.find(t => t.id === taskId);
+      if (task) {
+        await db.updateTask(taskId, { completed: !task.completed });
+        loadTasks();
+      }
+    }
+
+    // Delete task
+    async function deleteTask(taskId) {
+      await db.deleteTask(taskId);
+      loadTasks();
+    }
+
+    // Edit task date
+    function editTaskDate(taskId) {
+      currentTaskId = taskId;
+      currentDate = new Date();
+      updateCalendar();
+      showPopup();
+    }
+
+    // Update calendar display
+    function updateCalendar() {
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+      
+      document.getElementById('calendarMonth').textContent = 
+        `${monthNames[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+      
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      
+      let html = '<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: var(--space-sm);">';
+      
+      // Day headers
+      ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].forEach(day => {
+        html += `<div style="text-align: center; font-weight: bold; padding: var(--space-xs); font-size: 0.75rem;">${day}</div>`;
+      });
+      
+      // Empty cells
+      for (let i = 0; i < firstDay; i++) {
+        html += '<div></div>';
+      }
+      
+      // Days
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const isToday = dateStr === todayStr;
+        
+        let style = 'text-align: center; padding: var(--space-xs); cursor: pointer; border: 2px solid transparent; border-radius: 3px;';
+        if (isToday) {
+          style += 'border-color: var(--border-color);';
+        }
+        
+        html += `<div style="${style}" onclick="selectDate('${dateStr}')">${day}</div>`;
+      }
+      
+      html += '</div>';
+      document.getElementById('calendarGrid').innerHTML = html;
+    }
+
+    // Change month
+    function changeMonth(delta) {
+      currentDate.setMonth(currentDate.getMonth() + delta);
+      updateCalendar();
+    }
+
+    // Select date
+    async function selectDate(dateStr) {
+      if (currentTaskId) {
+        await db.updateTask(currentTaskId, { dueDate: dateStr });
+        loadTasks();
+        hidePopup();
+      }
+    }
+
+    // Clear task date
+    async function clearTaskDate() {
+      if (currentTaskId) {
+        await db.updateTask(currentTaskId, { dueDate: null });
+        loadTasks();
+        hidePopup();
+      }
+    }
+
+    // Show popup
+    function showPopup() {
+      document.getElementById('datePickerOverlay').style.display = 'block';
+      document.getElementById('datePickerPopup').style.display = 'block';
+    }
+
+    // Hide popup
+    function hidePopup() {
+      document.getElementById('datePickerOverlay').style.display = 'none';
+      document.getElementById('datePickerPopup').style.display = 'none';
+      currentTaskId = null;
+    }
+
+    // Clear completed tasks
+    async function clearCompletedTasks() {
+      const tasks = await db.getTasks();
+      const completedTasks = tasks.filter(t => t.completed);
+      
+      if (completedTasks.length === 0) {
+        alert('No completed tasks to clear');
+        return;
+      }
+      
+      if (confirm(`Clear ${completedTasks.length} completed task${completedTasks.length > 1 ? 's' : ''}?`)) {
+        for (const task of completedTasks) {
+          await db.deleteTask(task.id);
+        }
+        loadTasks();
+      }
+    }
+
+    // Format date
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr + 'T00:00:00');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const diffTime = date - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) return 'Today';
+      if (diffDays === 1) return 'Tomorrow';
+      if (diffDays === -1) return 'Yesterday';
+      if (diffDays < 0) return `${Math.abs(diffDays)}d ago`;
+      if (diffDays < 7) return `${diffDays}d`;
+      
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    // Escape HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Enter key to add task
+    newTaskInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        addTask();
+      }
+    });
+  </script>
+</body>
+</html>

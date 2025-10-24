@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Files</title>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../lib/sql-wasm.js"></script>
+  <script src="../functions/db.js"></script>
+  <script src="../functions/config.js"></script>
+  <script src="../functions/settings.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    .topbar {
+      margin: 0;
+      flex-shrink: 0;
+    }
+    
+    /* File Browser */
+    #fileBrowser {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--space-md);
+    }
+    
+    .file-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: var(--space-md);
+    }
+    
+    .file-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: var(--space-sm);
+      cursor: pointer;
+      transition: background 0.15s;
+      border-radius: var(--radius-sm);
+    }
+    
+    .file-item:hover {
+      background: var(--bg-inset);
+    }
+    
+    .file-icon {
+      width: 48px;
+      height: 48px;
+      margin-bottom: var(--space-xs);
+      flex-shrink: 0;
+    }
+    
+    .file-info {
+      width: 100%;
+      text-align: center;
+    }
+    
+    .file-name {
+      font-size: 0.875rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      line-height: 1.3;
+    }
+    
+    .file-date {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+    
+    /* Note Editor */
+    #noteEditor {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 90%;
+      max-width: 700px;
+      height: 70vh;
+      background: var(--bg-primary);
+      border: 2px solid var(--border-color);
+      border-radius: var(--radius-md);
+      z-index: 100;
+      flex-direction: column;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    
+    #noteEditor.active {
+      display: flex;
+    }
+    
+    #noteEditor.fullscreen {
+      width: 100%;
+      max-width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      transform: none;
+      border: none;
+      border-radius: 0;
+    }
+    
+    #noteTextarea::placeholder {
+      color: var(--text-secondary);
+    }
+    
+    /* Sketch Editor */
+    #sketchEditor {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 90%;
+      max-width: 800px;
+      height: 75vh;
+      background: var(--bg-primary);
+      border: 2px solid var(--border-color);
+      border-radius: var(--radius-md);
+      z-index: 100;
+      flex-direction: column;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    
+    #sketchEditor.active {
+      display: flex;
+    }
+    
+    #sketchEditor.fullscreen {
+      width: 100%;
+      max-width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      transform: none;
+      border: none;
+      border-radius: 0;
+    }
+    
+    .editor-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.3);
+      z-index: 99;
+    }
+    
+    .editor-overlay.active {
+      display: block;
+    }
+    
+    #drawCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      background: var(--bg-inset);
+    }
+  </style>
+  
+  <script>
+    // Load SVG icon sprite
+    fetch('../assets/icons/icons.svg')
+      .then(response => response.text())
+      .then(data => {
+        const div = document.createElement('div');
+        div.style.display = 'none';
+        div.innerHTML = data;
+        document.body.insertBefore(div, document.body.firstChild);
+      })
+      .catch(err => console.error('Failed to load icons:', err));
+  </script>
+</head>
+<body>
+  <!-- Main Topbar -->
+  <div class="topbar" id="mainTopbar">
+    <div class="topbar-title" style="text-align: left;">
+      <a href="../index.html" style="color: inherit; text-decoration: none; opacity: 0.6;">Home</a>
+      <span style="opacity: 0.4; margin: 0 var(--space-xs);">/</span>
+      <span>Files</span>
+    </div>
+    <div class="topbar-actions">
+      <button onclick="showNewFileMenu()">+ New</button>
+    </div>
+  </div>
+  
+  <!-- File Browser -->
+  <div id="fileBrowser">
+    <div class="file-grid" id="fileGrid"></div>
+  </div>
+  
+  <!-- Note Editor -->
+  <div id="noteEditor">
+    <div class="popup-header">
+      <h3 class="popup-title" id="noteTitle">Note</h3>
+      <button class="close-btn" onclick="closeNoteEditor()"></button>
+    </div>
+    <textarea id="noteTextarea" placeholder="Start typing..." style="flex: 1; width: 100%; border: none; outline: none; padding: var(--space-md); font-family: inherit; font-size: 16px; line-height: 1.6; background: var(--bg-primary); color: var(--text-primary); resize: none; box-sizing: border-box;"></textarea>
+    <div class="popup-footer">
+      <button onclick="toggleNoteFullscreen()" style="font-family: var(--font-sans) !important;">⛶ Fullscreen</button>
+      <button onclick="deleteCurrentNote()" style="font-family: var(--font-sans) !important;">Delete</button>
+    </div>
+  </div>
+  
+  <!-- Sketch Editor -->
+  <div id="sketchEditor">
+    <div class="popup-header">
+      <h3 class="popup-title" id="sketchTitle">Sketch</h3>
+      <button class="close-btn" onclick="closeSketchEditor()"></button>
+    </div>
+    <div style="flex: 1; overflow: hidden; position: relative;">
+      <canvas id="drawCanvas"></canvas>
+    </div>
+    <div class="popup-footer">
+      <button onclick="toggleSketchFullscreen()" style="font-family: var(--font-sans) !important;">⛶ Fullscreen</button>
+      <button onclick="clearCanvas()" style="font-family: var(--font-sans) !important;">Clear</button>
+      <button onclick="deleteCurrentSketch()" style="font-family: var(--font-sans) !important;">Delete</button>
+    </div>
+  </div>
+  
+  <!-- Editor Overlay -->
+  <div class="editor-overlay" id="editorOverlay" onclick="closeCurrentEditor()"></div>
+  
+  <script>
+    let currentView = 'browser'; // 'browser', 'note', 'sketch'
+    let currentFileId = null;
+    let currentFileType = null;
+    let saveTimeout = null;
+    
+    // Canvas variables
+    let canvas = null;
+    let ctx = null;
+    let isDrawing = false;
+    let lastX = 0;
+    let lastY = 0;
+    
+    // Initialize
+    window.addEventListener('DOMContentLoaded', async () => {
+      try {
+        console.log('Initializing files app...');
+        await db.init();
+        console.log('Database initialized');
+        
+        // Check if we should open a specific file
+        const requestedNoteId = localStorage.getItem('files:openNote');
+        const requestedSketchId = localStorage.getItem('files:openSketch');
+        localStorage.removeItem('files:openNote');
+        localStorage.removeItem('files:openSketch');
+        
+        if (requestedNoteId) {
+          console.log('Opening specific note:', requestedNoteId);
+          await openFile(requestedNoteId, 'note');
+        } else if (requestedSketchId) {
+          console.log('Opening specific sketch:', requestedSketchId);
+          await openFile(requestedSketchId, 'sketch');
+        } else {
+          console.log('Loading all files...');
+          await loadFiles();
+        }
+        
+        initCanvas();
+        console.log('Files app initialized successfully');
+      } catch (error) {
+        console.error('Error initializing files app:', error);
+      }
+    });
+    
+    // Load all files
+    async function loadFiles() {
+      try {
+        const files = await db.getAllFiles();
+        console.log('Files loaded:', files);
+        const grid = document.getElementById('fileGrid');
+        
+        if (!files || files.length === 0) {
+          grid.innerHTML = '<p class="muted" style="grid-column: 1 / -1; text-align: center; padding: var(--space-xl);">No files yet. Click + New to create one.</p>';
+          return;
+        }
+        
+        grid.innerHTML = files.map(file => {
+          const date = new Date(file.lastModified).toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric'
+          });
+          
+          return `
+            <div class="file-item" onclick="openFile('${file.id}', '${file.type}')">
+              <svg class="icon file-icon">
+                <use href="#icon-${file.icon}"></use>
+              </svg>
+              <div class="file-info">
+                <div class="file-name">${escapeHtml(file.title)}</div>
+                <div class="file-date">${date}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } catch (error) {
+        console.error('Error loading files:', error);
+        const grid = document.getElementById('fileGrid');
+        grid.innerHTML = '<p class="muted" style="grid-column: 1 / -1; text-align: center; padding: var(--space-xl);">Error loading files. Check console for details.</p>';
+      }
+    }
+    
+    // Show new file menu
+    function showNewFileMenu() {
+      const popupHTML = `
+        <div class="popup active">
+          <div class="popup-header">
+            <h3 class="popup-title">Create New</h3>
+            <button class="close-btn" onclick="hidePopup()"></button>
+          </div>
+          <div class="popup-content" style="padding: 0;">
+            <div class="popup-item" onclick="createNewNote()" style="cursor: pointer; padding: var(--space-md); border-bottom: 2px solid var(--border-color);">
+              <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-sm);">
+                <use href="#icon-file-text"></use>
+              </svg>
+              <strong>New Note</strong>
+            </div>
+            <div class="popup-item" onclick="createNewSketch()" style="cursor: pointer; padding: var(--space-md);">
+              <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-sm);">
+                <use href="#icon-edit"></use>
+              </svg>
+              <strong>New Sketch</strong>
+            </div>
+          </div>
+        </div>
+        <div class="popup-overlay active" onclick="hidePopup()"></div>
+      `;
+      
+      document.body.insertAdjacentHTML('beforeend', popupHTML);
+    }
+    
+    function hidePopup() {
+      const popup = document.querySelector('.popup');
+      const overlay = document.querySelector('.popup-overlay');
+      if (popup) popup.remove();
+      if (overlay) overlay.remove();
+    }
+    
+    // Create new note
+    async function createNewNote() {
+      hidePopup();
+      const id = Date.now().toString();
+      await db.saveNote(id, 'Untitled', '');
+      openFile(id, 'note');
+    }
+    
+    // Create new sketch
+    async function createNewSketch() {
+      hidePopup();
+      const id = Date.now().toString();
+      const emptyCanvas = document.createElement('canvas');
+      emptyCanvas.width = 800;
+      emptyCanvas.height = 600;
+      const imageData = emptyCanvas.toDataURL('image/png');
+      await db.saveSketch(id, 'Untitled', imageData);
+      openFile(id, 'sketch');
+    }
+    
+    // Open file
+    async function openFile(id, type) {
+      currentFileId = id;
+      currentFileType = type;
+      
+      if (type === 'note') {
+        await openNoteEditor(id);
+      } else if (type === 'sketch') {
+        await openSketchEditor(id);
+      }
+    }
+    
+    // ===== NOTE EDITOR =====
+    async function openNoteEditor(noteId) {
+      const note = await db.getNote(noteId);
+      if (!note) return;
+      
+      currentView = 'note';
+      const editor = document.getElementById('noteEditor');
+      const overlay = document.getElementById('editorOverlay');
+      const textarea = document.getElementById('noteTextarea');
+      const title = document.getElementById('noteTitle');
+      
+      textarea.value = note.content || '';
+      title.textContent = note.title;
+      editor.classList.add('active');
+      overlay.classList.add('active');
+      
+      textarea.focus();
+    }
+    
+    async function closeNoteEditor() {
+      await saveCurrentNote();
+      
+      const editor = document.getElementById('noteEditor');
+      const overlay = document.getElementById('editorOverlay');
+      editor.classList.remove('active', 'fullscreen');
+      overlay.classList.remove('active');
+      currentView = 'browser';
+      currentFileId = null;
+      currentFileType = null;
+      
+      await loadFiles();
+    }
+    
+    function toggleNoteFullscreen() {
+      const editor = document.getElementById('noteEditor');
+      const overlay = document.getElementById('editorOverlay');
+      const btn = event.target;
+      
+      if (editor.classList.contains('fullscreen')) {
+        editor.classList.remove('fullscreen');
+        overlay.classList.add('active');
+        btn.textContent = '⛶ Fullscreen';
+      } else {
+        editor.classList.add('fullscreen');
+        overlay.classList.remove('active');
+        btn.textContent = '⛶ Exit Fullscreen';
+      }
+    }
+    
+    async function saveCurrentNote() {
+      if (!currentFileId || currentFileType !== 'note') return;
+      
+      const textarea = document.getElementById('noteTextarea');
+      const content = textarea.value;
+      const title = content.split('\n')[0].trim() || 'Untitled';
+      
+      await db.saveNote(currentFileId, title, content);
+      document.getElementById('noteTitle').textContent = title;
+    }
+    
+    async function deleteCurrentNote() {
+      if (!currentFileId || currentFileType !== 'note') return;
+      
+      if (confirm('Delete this note?')) {
+        await db.deleteNote(currentFileId);
+        closeNoteEditor();
+      }
+    }
+    
+    // Auto-save note on input
+    document.getElementById('noteTextarea').addEventListener('input', () => {
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(saveCurrentNote, 800);
+    });
+    
+    // ===== SKETCH EDITOR =====
+    function initCanvas() {
+      canvas = document.getElementById('drawCanvas');
+      ctx = canvas.getContext('2d');
+      
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+      
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      
+      // Mouse events
+      canvas.addEventListener('mousedown', startDrawing);
+      canvas.addEventListener('mousemove', draw);
+      canvas.addEventListener('mouseup', stopDrawing);
+      canvas.addEventListener('mouseout', stopDrawing);
+      
+      // Touch events
+      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+      canvas.addEventListener('touchend', stopDrawing);
+      canvas.addEventListener('touchcancel', stopDrawing);
+    }
+    
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const oldData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      
+      ctx.putImageData(oldData, 0, 0);
+      
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+    }
+    
+    function startDrawing(e) {
+      isDrawing = true;
+      const rect = canvas.getBoundingClientRect();
+      lastX = e.clientX - rect.left;
+      lastY = e.clientY - rect.top;
+    }
+    
+    function draw(e) {
+      if (!isDrawing) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      
+      lastX = x;
+      lastY = y;
+    }
+    
+    function stopDrawing() {
+      if (isDrawing && currentFileType === 'sketch') {
+        saveCurrentSketch();
+      }
+      isDrawing = false;
+    }
+    
+    function handleTouchStart(e) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      isDrawing = true;
+      lastX = touch.clientX - rect.left;
+      lastY = touch.clientY - rect.top;
+    }
+    
+    function handleTouchMove(e) {
+      e.preventDefault();
+      if (!isDrawing) return;
+      
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      
+      lastX = x;
+      lastY = y;
+    }
+    
+    async function openSketchEditor(sketchId) {
+      const sketch = await db.getSketch(sketchId);
+      if (!sketch) return;
+      
+      currentView = 'sketch';
+      const editor = document.getElementById('sketchEditor');
+      const overlay = document.getElementById('editorOverlay');
+      const title = document.getElementById('sketchTitle');
+      
+      title.textContent = sketch.title;
+      editor.classList.add('active');
+      overlay.classList.add('active');
+      
+      // Load image onto canvas
+      if (sketch.imageData) {
+        const img = new Image();
+        img.onload = () => {
+          resizeCanvas();
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          const rect = canvas.getBoundingClientRect();
+          ctx.drawImage(img, 0, 0, rect.width, rect.height);
+        };
+        img.src = sketch.imageData;
+      } else {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+    
+    async function closeSketchEditor() {
+      await saveCurrentSketch();
+      
+      const editor = document.getElementById('sketchEditor');
+      const overlay = document.getElementById('editorOverlay');
+      editor.classList.remove('active', 'fullscreen');
+      overlay.classList.remove('active');
+      currentView = 'browser';
+      currentFileId = null;
+      currentFileType = null;
+      
+      await loadFiles();
+    }
+    
+    function toggleSketchFullscreen() {
+      const editor = document.getElementById('sketchEditor');
+      const overlay = document.getElementById('editorOverlay');
+      const btn = event.target;
+      
+      if (editor.classList.contains('fullscreen')) {
+        editor.classList.remove('fullscreen');
+        overlay.classList.add('active');
+        btn.textContent = '⛶ Fullscreen';
+      } else {
+        editor.classList.add('fullscreen');
+        overlay.classList.remove('active');
+        btn.textContent = '⛶ Exit Fullscreen';
+      }
+      
+      // Resize canvas after fullscreen toggle
+      setTimeout(resizeCanvas, 100);
+    }
+    
+    function closeCurrentEditor() {
+      if (currentView === 'note') {
+        closeNoteEditor();
+      } else if (currentView === 'sketch') {
+        closeSketchEditor();
+      }
+    }
+    
+    async function saveCurrentSketch() {
+      if (!currentFileId || currentFileType !== 'sketch') return;
+      
+      const imageData = canvas.toDataURL('image/png');
+      const sketch = await db.getSketch(currentFileId);
+      const title = sketch?.title || 'Sketch';
+      
+      await db.saveSketch(currentFileId, title, imageData);
+    }
+    
+    async function deleteCurrentSketch() {
+      if (!currentFileId || currentFileType !== 'sketch') return;
+      
+      if (confirm('Delete this sketch?')) {
+        await db.deleteSketch(currentFileId);
+        closeSketchEditor();
+      }
+    }
+    
+    function clearCanvas() {
+      if (confirm('Clear this sketch?')) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        saveCurrentSketch();
+      }
+    }
+    
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    // Save before leaving
+    window.addEventListener('beforeunload', async () => {
+      clearTimeout(saveTimeout);
+      if (currentView === 'note') {
+        await saveCurrentNote();
+      } else if (currentView === 'sketch') {
+        await saveCurrentSketch();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Timer</title>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../functions/config.js"></script>
+  <script src="../lib/sql-wasm.js"></script>
+  <script src="../functions/db.js"></script>
+  <script src="../functions/settings.js"></script>
+  
+  <script>
+    // Load SVG icon sprite
+    fetch('../assets/icons/icons.svg')
+      .then(response => response.text())
+      .then(data => {
+        const div = document.createElement('div');
+        div.style.display = 'none';
+        div.innerHTML = data;
+        document.body.insertBefore(div, document.body.firstChild);
+      })
+      .catch(err => console.error('Failed to load icons:', err));
+  </script>
+</head>
+<body data-page="timer">
+  
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-title" style="text-align: left;">
+      <a href="../index.html" style="color: inherit; text-decoration: none; opacity: 0.6;">Home</a>
+      <span style="opacity: 0.4; margin: 0 var(--space-xs);">/</span>
+      <span>Timer</span>
+    </div>
+      <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-xs);">
+        <use href="#icon-clock"></use>
+      </svg>
+      Timer
+    </div>
+    <div class="topbar-actions"></div>
+  </div>
+  
+  <main class="container-narrow">
+    
+    <!-- Timer Display -->
+    <div style="text-align: center; margin: var(--space-xl) 0;">
+      <div id="timerDisplay" style="font-size: 72px; font-weight: 600; font-family: var(--font-mono); letter-spacing: 0.05em; margin-bottom: var(--space-lg);">
+        25:00
+      </div>
+      <div id="timerLabel" class="text-dim font-base" style="margin-bottom: var(--space-xl);">
+        Focus Session
+      </div>
+    </div>
+    
+    <!-- Control Buttons -->
+    <div style="display: flex; gap: var(--space-sm); margin-bottom: var(--space-xl);">
+      <button id="startBtn" class="btn" style="flex: 1;" onclick="startTimer()">Start</button>
+      <button id="pauseBtn" class="btn" style="flex: 1; display: none;" onclick="pauseTimer()">Pause</button>
+      <button id="resetBtn" class="btn" onclick="resetTimer()">Reset</button>
+    </div>
+    
+    <!-- Preset Timers -->
+    <div class="card">
+      <h3 style="font-size: var(--font-base); font-weight: 600; margin-bottom: var(--space-md);">Quick Start</h3>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-sm);">
+        <button class="btn" onclick="setTimer(25, 'Focus (25m)')">25m</button>
+        <button class="btn" onclick="setTimer(15, 'Focus (15m)')">15m</button>
+        <button class="btn" onclick="setTimer(10, 'Focus (10m)')">10m</button>
+        <button class="btn" onclick="setTimer(5, 'Break (5m)')">5m</button>
+        <button class="btn" onclick="setTimer(3, 'Break (3m)')">3m</button>
+        <button class="btn" onclick="setTimer(1, 'Quick (1m)')">1m</button>
+      </div>
+    </div>
+    
+    <!-- Custom Timer -->
+    <div class="card">
+      <h3 style="font-size: var(--font-base); font-weight: 600; margin-bottom: var(--space-md);">Custom Timer</h3>
+      <div style="display: flex; gap: var(--space-sm); align-items: center;">
+        <input type="number" id="customMinutes" class="input" placeholder="Minutes" min="1" max="999" style="flex: 1;" />
+        <button class="btn" onclick="setCustomTimer()">Set</button>
+      </div>
+    </div>
+    
+    <!-- Stats -->
+    <div class="card">
+      <div class="card-row">
+        <span class="text-dim">Sessions Today</span>
+        <span id="sessionsCount" style="font-weight: 600;">0</span>
+      </div>
+    </div>
+    
+  </main>
+
+  <script>
+    let timeRemaining = 25 * 60; // seconds
+    let totalTime = 25 * 60;
+    let timerInterval = null;
+    let isRunning = false;
+    let sessionsToday = 0;
+    
+    const display = document.getElementById('timerDisplay');
+    const label = document.getElementById('timerLabel');
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const sessionsEl = document.getElementById('sessionsCount');
+    
+    function startTimer() {
+      if (isRunning) return;
+      
+      isRunning = true;
+      startBtn.style.display = 'none';
+      pauseBtn.style.display = 'block';
+      
+      timerInterval = setInterval(() => {
+        timeRemaining--;
+        updateDisplay();
+        
+        if (timeRemaining <= 0) {
+          completeTimer();
+        }
+      }, 1000);
+    }
+    
+    function pauseTimer() {
+      isRunning = false;
+      startBtn.style.display = 'block';
+      pauseBtn.style.display = 'none';
+      clearInterval(timerInterval);
+    }
+    
+    function resetTimer() {
+      pauseTimer();
+      timeRemaining = totalTime;
+      updateDisplay();
+    }
+    
+    function completeTimer() {
+      pauseTimer();
+      
+      sessionsToday++;
+      updateSessionsCount();
+      saveSessionsCount();
+      
+      display.textContent = '00:00';
+      label.textContent = 'Session Complete!';
+      
+      if ('vibrate' in navigator) {
+        navigator.vibrate([200, 100, 200]);
+      }
+      
+      setTimeout(() => {
+        timeRemaining = totalTime;
+        updateDisplay();
+      }, 3000);
+    }
+    
+    function setTimer(minutes, labelText) {
+      pauseTimer();
+      totalTime = minutes * 60;
+      timeRemaining = totalTime;
+      label.textContent = labelText;
+      updateDisplay();
+    }
+    
+    function setCustomTimer() {
+      const input = document.getElementById('customMinutes');
+      const minutes = parseInt(input.value);
+      
+      if (minutes && minutes > 0 && minutes <= 999) {
+        setTimer(minutes, `Custom (${minutes}m)`);
+        input.value = '';
+      }
+    }
+    
+    function updateDisplay() {
+      const minutes = Math.floor(timeRemaining / 60);
+      const seconds = timeRemaining % 60;
+      display.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    function updateSessionsCount() {
+      sessionsEl.textContent = sessionsToday;
+    }
+    
+    function loadSessionsCount() {
+      const today = new Date().toDateString();
+      const stored = localStorage.getItem('timerSessions');
+      
+      if (stored) {
+        const data = JSON.parse(stored);
+        if (data.date === today) {
+          sessionsToday = data.count;
+        } else {
+          sessionsToday = 0;
+          saveSessionsCount();
+        }
+      }
+      
+      updateSessionsCount();
+    }
+    
+    function saveSessionsCount() {
+      const today = new Date().toDateString();
+      localStorage.setItem('timerSessions', JSON.stringify({
+        date: today,
+        count: sessionsToday
+      }));
+    }
+    
+    loadSessionsCount();
+    updateDisplay();
+    
+    document.getElementById('customMinutes').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') setCustomTimer();
+    });
+  </script>
+</body>
+</html>

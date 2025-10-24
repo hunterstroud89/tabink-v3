@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#e8e8e8" />
+  <title>Tabink</title>
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json" />
+  
+  <link rel="stylesheet" href="assets/style.css" />
+  <script src="lib/sql-wasm.js"></script>
+  <script src="functions/db.js"></script>
+  <script src="functions/config.js"></script>
+  <script src="functions/ui.js"></script>
+  <script src="functions/settings.js"></script>
+  
+  <!-- Widget Scripts -->
+  <script src="apps/widgets/files-widget.js"></script>
+  <script src="apps/widgets/tasks-widget.js"></script>
+  <script src="apps/widgets/feed-widget.js"></script>
+  <script src="apps/widgets/timer-widget.js"></script>
+  
+  <script>
+    // Load SVG icon sprite
+    fetch('assets/icons/icons.svg')
+      .then(response => response.text())
+      .then(data => {
+        const div = document.createElement('div');
+        div.style.display = 'none';
+        div.innerHTML = data;
+        document.body.insertBefore(div, document.body.firstChild);
+      })
+      .catch(err => console.error('Failed to load icons:', err));
+  </script>
+</head>
+<body data-page="home">
+  
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="topbar-title">/tabink</div>
+    <div class="topbar-actions">
+      <button id="timerButton" onclick="TimerWidget.toggle()">
+        <svg class="icon" style="vertical-align: middle;">
+          <use href="#icon-clock"></use>
+        </svg>
+      </button>
+      <button onclick="openApp('settings')">Settings</button>
+    </div>
+  </div>
+  
+  <!-- Widgets Section -->
+  <section class="grid grid-2" style="margin-bottom: var(--space-lg);">
+    <!-- Notes Widget -->
+    <div class="window">
+      <div class="window-header">
+        <div class="window-title">
+          <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-xs); cursor: pointer;" onclick="openApp('files')">
+            <use href="#icon-folder"></use>
+          </svg>
+          Recent Files
+          <span onclick="showAllNotesPopup()" style="cursor: pointer; margin-left: var(--space-xs);">▼</span>
+        </div>
+        <button onclick="showNewFilePopup()" style="width: 24px; height: 24px; padding: 0; border: 2px solid var(--border-color); background: var(--bg-raised); border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg class="icon" style="width: 16px; height: 16px;">
+            <use href="#icon-plus"></use>
+          </svg>
+        </button>
+      </div>
+      <div style="padding: var(--space-md);">
+        <div id="notesWidget">
+          <p class="muted text-sm">No notes yet.</p>
+        </div>
+      </div>
+    </div>
+      
+    <!-- Tasks Widget -->
+    <div class="window">
+      <div class="window-header">
+        <div class="window-title">
+          <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-xs); cursor: pointer;" onclick="openApp('tasks')">
+            <use href="#icon-checkbox"></use>
+          </svg>
+          Today's Tasks
+          <span onclick="showAllTasksPopup()" style="cursor: pointer; margin-left: var(--space-xs);">▼</span>
+        </div>
+        <button onclick="TasksWidget.showAddTaskPopup()" style="width: 24px; height: 24px; padding: 0; border: 2px solid var(--border-color); background: var(--bg-raised); border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg class="icon" style="width: 16px; height: 16px;">
+            <use href="#icon-plus"></use>
+          </svg>
+        </button>
+      </div>
+      <div style="padding: var(--space-md);">
+        <div id="tasksWidget">
+          <p class="muted text-sm">No tasks for today. Start by adding a new task.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Feed Widget -->
+  <section style="margin-bottom: var(--space-lg);">
+    <div class="window">
+      <div class="window-header">
+        <div class="window-title">
+          <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-xs); cursor: pointer;" onclick="openApp('feed')">
+            <use href="#icon-file"></use>
+          </svg>
+          Recent Articles
+        </div>
+        <button onclick="openApp('feed')" style="width: 24px; height: 24px; padding: 0; border: 2px solid var(--border-color); background: var(--bg-raised); border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg class="icon" style="width: 16px; height: 16px;">
+            <use href="#icon-arrow-right"></use>
+          </svg>
+        </button>
+      </div>
+      <div style="padding: var(--space-md);">
+        <div id="feedWidget">
+          <p class="muted text-sm">No articles yet. Visit the Feed app to add RSS feeds.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- App Grid -->
+  <div class="grid grid-5">
+    <div class="card" onclick="openApp('files')" style="cursor: pointer; text-align: center;">
+      <svg class="icon icon-xl" style="display: block; margin: 0 auto var(--space-sm);">
+        <use href="#icon-folder"></use>
+      </svg>
+      <div class="bold">Files</div>
+    </div>
+    
+    <div class="card" onclick="openApp('tasks')" style="cursor: pointer; text-align: center;">
+      <svg class="icon icon-xl" style="display: block; margin: 0 auto var(--space-sm);">
+        <use href="#icon-checkbox"></use>
+      </svg>
+      <div class="bold">Tasks</div>
+    </div>
+    
+    <div class="card" onclick="openApp('timer')" style="cursor: pointer; text-align: center;">
+      <svg class="icon icon-xl" style="display: block; margin: 0 auto var(--space-sm);">
+        <use href="#icon-clock"></use>
+      </svg>
+      <div class="bold">Timer</div>
+    </div>
+    
+    <div class="card" onclick="openApp('feed')" style="cursor: pointer; text-align: center;">
+      <svg class="icon icon-xl" style="display: block; margin: 0 auto var(--space-sm);">
+        <use href="#icon-file"></use>
+      </svg>
+      <div class="bold">Feed</div>
+    </div>
+    
+    <div class="card" onclick="openApp('settings')" style="cursor: pointer; text-align: center;">
+      <svg class="icon icon-xl" style="display: block; margin: 0 auto var(--space-sm);">
+        <use href="#icon-settings"></use>
+      </svg>
+      <div class="bold">Settings</div>
+    </div>
+  </div>
+
+  
+  <script>
+    let currentTaskId = null;
+    let currentDate = new Date();
+
+    // Register Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./functions/service-worker.js')
+        .then((registration) => {
+          console.log('Service Worker registered:', registration.scope);
+        })
+        .catch((error) => {
+          console.log('Service Worker registration failed:', error);
+        });
+    }
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', async () => {
+      await db.init();
+      loadWidgets();
+    });
+
+    // Simple navigation function
+    function openApp(appName) {
+      window.location.href = 'apps/' + appName + '.html';
+    }
+
+    // Load all widgets
+    async function loadWidgets() {
+      await FilesWidget.load();
+      await TasksWidget.load();
+      await FeedWidget.load();
+    }
+
+    // Show all notes popup
+    async function showAllNotesPopup() {
+      try {
+        const files = await db.getAllFiles();
+        if (!files || files.length === 0) {
+          alert('No files yet');
+          return;
+        }
+        
+        let popupHTML = `
+          <div class="popup active">
+            <div class="popup-header">
+              <h3 class="popup-title">
+                <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-xs);">
+                  <use href="#icon-folder"></use>
+                </svg>
+                All Files
+              </h3>
+              <button class="close-btn" onclick="hidePopup()"></button>
+            </div>
+            <div class="popup-content">`;
+        
+        files.forEach((file) => {
+          const icon = file.type === 'note' ? 'file-text' : 'edit';
+          popupHTML += `
+            <div class="popup-item">
+              <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-sm);">
+                <use href="#icon-${icon}"></use>
+              </svg>
+              <div style="flex:1;cursor:pointer" onclick="hidePopup(); FilesWidget.openFile('${file.id}', '${file.type}')">
+                <strong>${escapeHtml(file.title)}</strong>
+              </div>
+            </div>`;
+        });
+        
+        popupHTML += `
+            </div>
+            <div class="popup-footer">
+              <span>${files.length} files</span>
+            </div>
+          </div>
+          <div class="popup-overlay active" onclick="hidePopup()"></div>`;
+        
+        document.body.insertAdjacentHTML('beforeend', popupHTML);
+      } catch (e) {
+        console.error('Error showing all files:', e);
+      }
+    }
+    
+
+
+    // Show new file popup
+    function showNewFilePopup() {
+      const popupHTML = `
+        <div class="popup active">
+          <div class="popup-header">
+            <h3 class="popup-title">Create New</h3>
+            <button class="close-btn" onclick="hidePopup()"></button>
+          </div>
+          <div class="popup-content" style="padding: 0;">
+            <div class="popup-item" onclick="createNewNoteFromHome()" style="cursor: pointer; padding: var(--space-md); border-bottom: 2px solid var(--border-color);">
+              <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-sm);">
+                <use href="#icon-file-text"></use>
+              </svg>
+              <strong>New Note</strong>
+            </div>
+            <div class="popup-item" onclick="createNewSketchFromHome()" style="cursor: pointer; padding: var(--space-md);">
+              <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-sm);">
+                <use href="#icon-edit"></use>
+              </svg>
+              <strong>New Sketch</strong>
+            </div>
+          </div>
+        </div>
+        <div class="popup-overlay active" onclick="hidePopup()"></div>
+      `;
+      
+      document.body.insertAdjacentHTML('beforeend', popupHTML);
+    }
+
+    // Create new note from home
+    async function createNewNoteFromHome() {
+      const id = Date.now().toString();
+      await db.saveNote(id, 'Untitled', '');
+      localStorage.setItem('files:openNote', id);
+      window.location.href = 'apps/files.html';
+    }
+
+    // Create new sketch from home
+    async function createNewSketchFromHome() {
+      const id = Date.now().toString();
+      const emptyCanvas = document.createElement('canvas');
+      emptyCanvas.width = 800;
+      emptyCanvas.height = 600;
+      const imageData = emptyCanvas.toDataURL('image/png');
+      await db.saveSketch(id, 'Untitled', imageData);
+      localStorage.setItem('files:openSketch', id);
+      window.location.href = 'apps/files.html';
+    }
+
+    // Show all tasks popup
+    async function showAllTasksPopup() {
+      try {
+        const tasks = await db.getTasks();
+        if (!tasks || tasks.length === 0) {
+          alert('No tasks yet');
+          return;
+        }
+        
+        const incompleteTasks = tasks.filter(t => !t.completed);
+        const completedTasks = tasks.filter(t => t.completed);
+        
+        let popupHTML = `
+          <div class="popup active">
+            <div class="popup-header">
+              <h3 class="popup-title">
+                <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-xs);">
+                  <use href="#icon-checkbox"></use>
+                </svg>
+                All Tasks
+              </h3>
+              <button class="close-btn" onclick="hidePopup()"></button>
+            </div>
+            <div class="popup-content">`;
+        
+        if (incompleteTasks.length > 0) {
+          popupHTML += '<p class="bold" style="margin-bottom: var(--space-sm);">Incomplete</p>';
+          incompleteTasks.forEach((task) => {
+            let dueDateText = '';
+            if (task.dueDate) {
+              dueDateText = ` • ${formatDate(task.dueDate)}`;
+            }
+            popupHTML += `
+              <div class="popup-item">
+                <div style="flex:1;cursor:pointer" onclick="hidePopup(); openApp('tasks')">
+                  ${escapeHtml(task.text)}${dueDateText}
+                </div>
+              </div>`;
+          });
+        }
+        
+        if (completedTasks.length > 0) {
+          popupHTML += '<p class="bold" style="margin-top: var(--space-md); margin-bottom: var(--space-sm);">Completed</p>';
+          completedTasks.forEach(task => {
+            popupHTML += `
+              <div class="popup-item">
+                <div style="flex:1;text-decoration:line-through;opacity:0.6;cursor:pointer" onclick="hidePopup(); openApp('tasks')">
+                  ${escapeHtml(task.text)}
+                </div>
+              </div>`;
+          });
+        }
+        
+        popupHTML += `
+            </div>
+            <div class="popup-footer">
+              <span>${incompleteTasks.length} incomplete, ${completedTasks.length} completed</span>
+            </div>
+          </div>
+          <div class="popup-overlay active" onclick="hidePopup()"></div>`;
+        
+        document.body.insertAdjacentHTML('beforeend', popupHTML);
+      } catch (e) {
+        console.error('Error showing all tasks:', e);
+      }
+    }
+
+    // Hide popup
+    function hidePopup() {
+      const popup = document.querySelector('.popup');
+      const overlay = document.querySelector('.popup-overlay');
+      if (popup) popup.remove();
+      if (overlay) overlay.remove();
+    }
+
+    // Format date
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr + 'T00:00:00');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const diffTime = date - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) return 'Today';
+      if (diffDays === 1) return 'Tomorrow';
+      if (diffDays === -1) return 'Yesterday';
+      if (diffDays < 0) return `${Math.abs(diffDays)}d ago`;
+      if (diffDays < 7) return `${diffDays}d`;
+      
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+
+    // Escape HTML helper
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

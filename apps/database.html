@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Database Browser</title>
+  <link rel="stylesheet" href="../assets/style.css">
+  <script src="../lib/sql-wasm.js"></script>
+  <script src="../functions/db.js"></script>
+  <script src="../functions/settings.js"></script>
+  <style>
+    .query-section {
+      margin-bottom: var(--space-md);
+    }
+    
+    .query-textarea {
+      width: 100%;
+      min-height: 120px;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      padding: var(--space-sm);
+      border: 2px solid var(--border-color);
+      background: var(--bg-inset);
+      resize: vertical;
+      border-radius: var(--radius-sm);
+    }
+    
+    .table-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: var(--space-xs);
+      margin-bottom: var(--space-md);
+    }
+    
+    .table-button {
+      padding: var(--space-sm);
+      border: 2px solid var(--border-color);
+      background: var(--bg-raised);
+      cursor: pointer;
+      text-align: left;
+      border-radius: var(--radius-sm);
+      font-weight: bold;
+    }
+    
+    .table-button:hover {
+      background: var(--bg-hover);
+    }
+    
+    .table-button.active {
+      background: var(--text-primary);
+      color: var(--bg-primary);
+    }
+    
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      font-size: 14px;
+    }
+    
+    .results-table th,
+    .results-table td {
+      border: 2px solid var(--border-color);
+      padding: var(--space-sm);
+      text-align: left;
+    }
+    
+    .results-table th {
+      background: var(--text-primary);
+      color: var(--bg-primary);
+      font-weight: bold;
+    }
+    
+    .results-table tr:nth-child(even) {
+      background: var(--bg-inset);
+    }
+    
+    .error-box {
+      background: #ffe6e6;
+      border: 2px solid #cc0000;
+      color: #cc0000;
+      padding: var(--space-md);
+      margin-top: var(--space-sm);
+      border-radius: var(--radius-sm);
+    }
+    
+    .info-box {
+      background: #e6f3ff;
+      border: 2px solid #0066cc;
+      color: #0066cc;
+      padding: var(--space-md);
+      margin-top: var(--space-sm);
+      border-radius: var(--radius-sm);
+    }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: var(--space-sm);
+      margin-bottom: var(--space-md);
+    }
+    
+    .stat-card {
+      border: 2px solid var(--border-color);
+      padding: var(--space-sm);
+      background: var(--bg-raised);
+      border-radius: var(--radius-sm);
+    }
+    
+    .stat-number {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 2px;
+    }
+    
+    .stat-label {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+    
+    .button-group {
+      display: flex;
+      gap: var(--space-xs);
+      margin-top: var(--space-sm);
+      flex-wrap: wrap;
+    }
+    
+    .section-title {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: var(--space-sm);
+      padding-bottom: var(--space-xs);
+      border-bottom: 2px solid var(--border-color);
+    }
+  </style>
+</head>
+<body>
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-title" style="text-align: left;">
+      <a href="../index.html" style="color: inherit; text-decoration: none; opacity: 0.6;">Home</a>
+      <span style="opacity: 0.4; margin: 0 var(--space-xs);">/</span>
+      <a href="settings.html" style="color: inherit; text-decoration: none; opacity: 0.6;">Settings</a>
+      <span style="opacity: 0.4; margin: 0 var(--space-xs);">/</span>
+      <span>Database</span>
+    </div>
+    <div class="topbar-actions">
+      <button onclick="showToolsMenu()">🛠 Tools</button>
+      <button onclick="showExportImportMenu()">⚙ Backup</button>
+    </div>
+  </div>
+
+  <main class="container">
+    <!-- Database Statistics -->
+    <section>
+      <h2 class="section-title">Database Statistics</h2>
+      <div class="stats" id="stats">
+        <div class="stat-card">
+          <div class="stat-number" id="taskCount">0</div>
+          <div class="stat-label">Tasks</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="noteCount">0</div>
+          <div class="stat-label">Notes</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="sketchCount">0</div>
+          <div class="stat-label">Sketches</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="articleCount">0</div>
+          <div class="stat-label">Articles</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="feedCount">0</div>
+          <div class="stat-label">RSS Feeds</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quick Table Views -->
+    <section>
+      <h2 class="section-title">Quick Views</h2>
+      <div class="table-grid">
+        <button class="table-button" onclick="viewTable('tasks')">Tasks</button>
+        <button class="table-button" onclick="viewTable('notes')">Notes</button>
+        <button class="table-button" onclick="viewTable('sketches')">Sketches</button>
+        <button class="table-button" onclick="viewTable('feed_articles')">Articles</button>
+        <button class="table-button" onclick="viewTable('rss_feeds')">RSS Feeds</button>
+        <button class="table-button" onclick="viewTable('settings')">Settings</button>
+        <button class="table-button" onclick="viewTable('feed_images')">Images</button>
+      </div>
+    </section>
+
+    <!-- SQL Query Editor -->
+    <section class="query-section">
+      <h2 class="section-title">SQL Query</h2>
+      <textarea 
+        id="sqlQuery" 
+        class="query-textarea" 
+        placeholder="Enter SQL query... e.g., SELECT * FROM tasks WHERE completed = 1"
+      >SELECT * FROM tasks</textarea>
+      
+      <div class="button-group">
+        <button onclick="executeQuery()" class="button bold">▶ Execute</button>
+        <button onclick="clearResults()" class="button">Clear</button>
+        <button onclick="document.getElementById('sqlQuery').value = 'SELECT name FROM sqlite_master WHERE type=\'table\''" class="button">Show Tables</button>
+      </div>
+      
+      <div id="queryInfo"></div>
+      <div id="queryError"></div>
+    </section>
+
+    <!-- Results -->
+    <section id="resultsSection" style="display: none;">
+      <h2 class="section-title">Results (<span id="rowCount">0</span> rows)</h2>
+      <div style="overflow-x: auto;">
+        <table class="results-table" id="resultsTable">
+          <thead id="resultsHead"></thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let currentTable = null;
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', async () => {
+      await db.init();
+      updateStats();
+    });
+    
+    // Show export/import menu
+    function showExportImportMenu() {
+      const popupHTML = `
+        <div class="popup active">
+          <div class="popup-header">
+            <h3 class="popup-title">Backup & Restore</h3>
+            <button class="close-btn" onclick="hidePopup()"></button>
+          </div>
+          <div class="popup-content">
+            <div class="popup-item" data-number="1">
+              <div style="flex:1;cursor:pointer" onclick="exportDatabase()">
+                <strong>Export Database</strong>
+                <div class="text-sm muted">Download .db file for backup</div>
+              </div>
+            </div>
+            <div class="popup-item" data-number="2">
+              <div style="flex:1;cursor:pointer" onclick="document.getElementById('importFile').click()">
+                <strong>Import Database</strong>
+                <div class="text-sm muted">Restore from .db file</div>
+              </div>
+            </div>
+            <div class="popup-item" data-number="3">
+              <div style="flex:1;cursor:pointer" onclick="if(confirm('Clear all data? This cannot be undone!')) clearDatabase()">
+                <strong style="color: #cc0000;">Clear All Data</strong>
+                <div class="text-sm muted">Delete everything</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="popup-overlay active" onclick="hidePopup()"></div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', popupHTML);
+    }
+    
+    // Show tools menu
+    function showToolsMenu() {
+      const popupHTML = `
+        <div class="popup active">
+          <div class="popup-header">
+            <h3 class="popup-title">Database Tools</h3>
+            <button class="close-btn" onclick="hidePopup()"></button>
+          </div>
+          <div class="popup-content">
+            <div class="popup-item" data-number="1">
+              <div style="flex:1;cursor:pointer" onclick="addExampleData()">
+                <strong>Add Example Data</strong>
+                <div class="text-sm muted">Add sample tasks, notes, and sketches</div>
+              </div>
+            </div>
+            <div class="popup-item" data-number="2">
+              <div style="flex:1;cursor:pointer" onclick="cleanupOldArticles()">
+                <strong>Cleanup Old Articles</strong>
+                <div class="text-sm muted">Delete articles older than 30 days</div>
+              </div>
+            </div>
+            <div class="popup-item" data-number="3">
+              <div style="flex:1;cursor:pointer" onclick="clearAllArticles()">
+                <strong>Clear All Articles</strong>
+                <div class="text-sm muted">Delete all feed articles (for fresh start)</div>
+              </div>
+            </div>
+            <div class="popup-item" data-number="4">
+              <div style="flex:1;cursor:pointer" onclick="clearCompletedTasks()">
+                <strong>Clear Completed Tasks</strong>
+                <div class="text-sm muted">Delete all completed tasks</div>
+              </div>
+            </div>
+            <div class="popup-item" data-number="5">
+              <div style="flex:1;cursor:pointer" onclick="clearAllNotes()">
+                <strong>Clear All Notes</strong>
+                <div class="text-sm muted">Delete all notes</div>
+              </div>
+            </div>
+            <div class="popup-item" data-number="6">
+              <div style="flex:1;cursor:pointer" onclick="clearAllSketches()">
+                <strong>Clear All Sketches</strong>
+                <div class="text-sm muted">Delete all sketches</div>
+              </div>
+            </div>
+            <div class="popup-item" data-number="7">
+              <div style="flex:1;cursor:pointer" onclick="resetAllTasks()">
+                <strong>Reset All Tasks</strong>
+                <div class="text-sm muted">Mark all tasks as incomplete</div>
+              </div>
+            </div>
+            <div class="popup-item" data-number="8">
+              <div style="flex:1;cursor:pointer" onclick="vacuumDatabase()">
+                <strong>Optimize Database</strong>
+                <div class="text-sm muted">Reclaim unused space (VACUUM)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="popup-overlay active" onclick="hidePopup()"></div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', popupHTML);
+    }
+    
+    function hidePopup() {
+      document.querySelector('.popup')?.remove();
+      document.querySelector('.popup-overlay')?.remove();
+    }
+    
+    // Hidden file input for import
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = 'importFile';
+    fileInput.accept = '.db,.sqlite,.sqlite3';
+    fileInput.style.display = 'none';
+    fileInput.onchange = function() { importDatabase(this); };
+    document.body.appendChild(fileInput);
+
+    // Update statistics
+    async function updateStats() {
+      const tasks = await db.getTasks();
+      const notes = await db.getNotes();
+      const sketches = await db.getSketches();
+      const articles = await db.getArticles();
+      const feeds = await db.getFeeds();
+
+      document.getElementById('taskCount').textContent = tasks.length;
+      document.getElementById('noteCount').textContent = notes.length;
+      document.getElementById('sketchCount').textContent = sketches.length;
+      document.getElementById('articleCount').textContent = articles.length;
+      document.getElementById('feedCount').textContent = feeds.length;
+    }
+
+    // View entire table
+    function viewTable(tableName) {
+      currentTable = tableName;
+      
+      // Update active state
+      document.querySelectorAll('.table-button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      event.target.classList.add('active');
+      
+      // Set query
+      document.getElementById('sqlQuery').value = `SELECT * FROM ${tableName}`;
+      executeQuery();
+    }
+
+    // Execute SQL query
+    function executeQuery() {
+      const query = document.getElementById('sqlQuery').value.trim();
+      const infoDiv = document.getElementById('queryInfo');
+      const errorDiv = document.getElementById('queryError');
+      
+      // Clear previous results
+      infoDiv.innerHTML = '';
+      errorDiv.innerHTML = '';
+      
+      if (!query) {
+        errorDiv.innerHTML = '<div class="error-box">Please enter a SQL query</div>';
+        return;
+      }
+
+      try {
+        const results = db.exec(query);
+        
+        // Save database after any query execution
+        db.save();
+        
+        if (results.length === 0) {
+          // No results (might be UPDATE, DELETE, etc.)
+          infoDiv.innerHTML = '<div class="info-box">Query executed successfully. No results to display.</div>';
+          document.getElementById('resultsSection').style.display = 'none';
+          updateStats();
+          return;
+        }
+
+        const result = results[0];
+        const columns = result.columns;
+        const values = result.values;
+
+        // Show results
+        displayResults(columns, values);
+        
+      } catch (error) {
+        errorDiv.innerHTML = `<div class="error-box"><strong>Error:</strong> ${error.message}</div>`;
+        document.getElementById('resultsSection').style.display = 'none';
+      }
+    }
+
+    // Display results in table
+    function displayResults(columns, values) {
+      const resultsSection = document.getElementById('resultsSection');
+      const resultsHead = document.getElementById('resultsHead');
+      const resultsBody = document.getElementById('resultsBody');
+      const rowCount = document.getElementById('rowCount');
+
+      // Clear previous results
+      resultsHead.innerHTML = '';
+      resultsBody.innerHTML = '';
+
+      // Create header
+      const headerRow = document.createElement('tr');
+      columns.forEach(col => {
+        const th = document.createElement('th');
+        th.textContent = col;
+        headerRow.appendChild(th);
+      });
+      resultsHead.appendChild(headerRow);
+
+      // Create rows
+      values.forEach(row => {
+        const tr = document.createElement('tr');
+        row.forEach(cell => {
+          const td = document.createElement('td');
+          
+          // Format cell value
+          if (cell === null) {
+            td.textContent = 'NULL';
+            td.style.color = '#999';
+          } else if (typeof cell === 'string' && cell.length > 100) {
+            td.textContent = cell.substring(0, 100) + '...';
+            td.title = cell;
+          } else {
+            td.textContent = cell;
+          }
+          
+          tr.appendChild(td);
+        });
+        resultsBody.appendChild(tr);
+      });
+
+      // Update count and show
+      rowCount.textContent = values.length;
+      resultsSection.style.display = 'block';
+    }
+
+    // Clear results
+    function clearResults() {
+      document.getElementById('sqlQuery').value = '';
+      document.getElementById('resultsSection').style.display = 'none';
+      document.getElementById('queryInfo').innerHTML = '';
+      document.getElementById('queryError').innerHTML = '';
+      
+      document.querySelectorAll('.table-button').forEach(btn => {
+        btn.classList.remove('active');
+      });
+    }
+
+    // Export database
+    function exportDatabase() {
+      db.exportDB();
+    }
+
+    // Import database
+    async function importDatabase(input) {
+      const file = input.files[0];
+      if (!file) return;
+
+      if (confirm('This will replace your current database. Are you sure?')) {
+        await db.importDB(file);
+        updateStats();
+        clearResults();
+        alert('Database imported successfully!');
+      }
+      
+      input.value = ''; // Reset input
+    }
+
+    // Clear database
+    function clearDatabase() {
+      indexedDB.deleteDatabase('tabink');
+      localStorage.removeItem('tabink_db');
+      hidePopup();
+      alert('Database cleared! Refresh to reinitialize.');
+      location.reload();
+    }
+    
+    // Tool functions
+    async function addExampleData() {
+      hidePopup();
+      
+      // Add tasks
+      const exampleTasks = [
+        { text: 'Review project proposal', dueDate: '2025-10-25' },
+        { text: 'Update website documentation', dueDate: '2025-10-27' },
+        { text: 'Fix bug in login system', dueDate: '2025-10-24' },
+        { text: 'Prepare presentation slides', dueDate: '2025-10-28' },
+        { text: 'Call dentist for appointment', dueDate: '2025-10-26' },
+        { text: 'Order new laptop charger', dueDate: null },
+        { text: 'Backup all project files', dueDate: '2025-10-30' },
+        { text: 'Write blog post about SQLite', dueDate: '2025-11-01' },
+        { text: 'Respond to client emails', dueDate: '2025-10-23' },
+        { text: 'Test mobile app on different devices', dueDate: '2025-10-29' }
+      ];
+      
+      for (const task of exampleTasks) {
+        await db.addTask(task.text, task.dueDate);
+      }
+      
+      // Add notes
+      const exampleNotes = [
+        { title: 'Meeting Notes - Oct 22', content: 'Discussed project timeline and deliverables. Next meeting scheduled for Nov 5.\n\nKey points:\n- Budget approved\n- Team expansion needed\n- Launch date: December 15' },
+        { title: 'Book Recommendations', content: 'The Pragmatic Programmer by Andrew Hunt\nClean Code by Robert Martin\nDesign Patterns by Gang of Four\nRefactoring by Martin Fowler' },
+        { title: 'Weekend Plans', content: 'Saturday:\n- Farmers market at 9am\n- Lunch with Sarah\n- Afternoon: organize garage\n\nSunday:\n- Morning hike\n- Meal prep for the week\n- Evening: movie night' },
+        { title: 'Recipe Ideas', content: 'Things to try making:\n\n- Thai green curry with tofu\n- Homemade sourdough pizza\n- Classic chicken noodle soup\n- Apple pie with cheddar crust\n- Vegetarian lasagna' },
+        { title: 'Project Ideas', content: 'Personal finance tracker app\n- Track expenses by category\n- Set budgets and goals\n- Generate monthly reports\n\nHabit tracker\n- Daily check-ins\n- Streak tracking\n- Custom habits' },
+        { title: 'Grocery List', content: 'Produce: Bananas, Spinach, Tomatoes, Avocados\n\nDairy: Milk, Eggs, Greek yogurt\n\nPantry: Rice, Pasta, Olive oil, Canned beans' },
+        { title: 'Travel Ideas', content: 'Places to visit:\n\n1. Japan - Tokyo, Kyoto, Osaka\n2. Iceland - Northern lights, hot springs\n3. New Zealand - Hiking, nature\n4. Portugal - Lisbon, Porto\n5. Costa Rica - Beaches, rainforests' },
+        { title: 'Fitness Goals', content: 'Q4 2025 Goals:\n\n- Run 3x per week\n- Strength training 2x per week\n- Try yoga class\n- Hit 10k steps daily\n- Drink more water' },
+        { title: 'Gift Ideas', content: 'Mom - gardening tools, cookbook\nDad - noise-canceling headphones\nSister - art supplies, concert tickets\nBest friend - coffee subscription' },
+        { title: 'Quote Collection', content: '"The only way to do great work is to love what you do." - Steve Jobs\n\n"In the middle of difficulty lies opportunity." - Einstein\n\n"Be yourself; everyone else is already taken." - Oscar Wilde' }
+      ];
+      
+      for (const note of exampleNotes) {
+        const id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+        await db.saveNote(id, note.title, note.content);
+        await new Promise(resolve => setTimeout(resolve, 10)); // Small delay for unique IDs
+      }
+      
+      // Add sketches (simple base64 encoded placeholder images)
+      const exampleSketches = [
+        { title: 'Quick Sketch', imageData: createPlaceholderCanvas('Simple drawing') },
+        { title: 'Diagram Ideas', imageData: createPlaceholderCanvas('Flow chart') },
+        { title: 'UI Mockup', imageData: createPlaceholderCanvas('App layout') }
+      ];
+      
+      for (const sketch of exampleSketches) {
+        const id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+        await db.saveSketch(id, sketch.title, sketch.imageData);
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      
+      alert('✓ Added 10 tasks, 10 notes, and 3 sketches!');
+      updateStats();
+    }
+    
+    // Create a simple placeholder canvas
+    function createPlaceholderCanvas(text) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 800;
+      canvas.height = 600;
+      const ctx = canvas.getContext('2d');
+      
+      // Background
+      ctx.fillStyle = '#f5f5f5';
+      ctx.fillRect(0, 0, 800, 600);
+      
+      // Border
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(10, 10, 780, 580);
+      
+      // Text
+      ctx.fillStyle = '#333';
+      ctx.font = 'bold 48px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, 400, 300);
+      
+      // Some random lines to make it look like a sketch
+      ctx.strokeStyle = '#666';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(100, 400);
+      ctx.lineTo(700, 400);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.arc(400, 200, 50, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      return canvas.toDataURL('image/png');
+    }
+    
+    function cleanupOldArticles() {
+      hidePopup();
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const result = db.exec(`
+        DELETE FROM feed_articles 
+        WHERE saved = 0 
+        AND datetime(pubDate) < datetime('${thirtyDaysAgo.toISOString()}')
+      `);
+      
+      db.save();
+      alert('✓ Cleaned up old articles!');
+      updateStats();
+    }
+    
+    async function clearAllArticles() {
+      hidePopup();
+      if (confirm('Delete ALL articles? This will remove everything including saved articles. This cannot be undone!')) {
+        await db.clearAllArticles();
+        alert('✓ All articles deleted! Go to Feed and click Refresh to fetch fresh articles.');
+        updateStats();
+      }
+    }
+    
+    function clearCompletedTasks() {
+      hidePopup();
+      if (confirm('Delete all completed tasks?')) {
+        db.run('DELETE FROM tasks WHERE completed = 1');
+        db.save();
+        alert('✓ Deleted completed tasks!');
+        updateStats();
+      }
+    }
+    
+    function clearAllNotes() {
+      hidePopup();
+      if (confirm('Delete ALL notes? This cannot be undone!')) {
+        db.run('DELETE FROM notes');
+        db.save();
+        alert('✓ All notes deleted!');
+        updateStats();
+      }
+    }
+    
+    function clearAllSketches() {
+      hidePopup();
+      if (confirm('Delete ALL sketches? This cannot be undone!')) {
+        db.run('DELETE FROM sketches');
+        db.save();
+        alert('✓ All sketches deleted!');
+        updateStats();
+      }
+    }
+    
+    function resetAllTasks() {
+      hidePopup();
+      if (confirm('Mark all tasks as incomplete?')) {
+        db.run('UPDATE tasks SET completed = 0');
+        db.save();
+        alert('✓ All tasks reset to incomplete!');
+        updateStats();
+      }
+    }
+    
+    function vacuumDatabase() {
+      hidePopup();
+      db.exec('VACUUM');
+      db.save();
+      alert('✓ Database optimized!');
+    }
+
+    // Enter key to execute
+    document.getElementById('sqlQuery').addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'Enter') {
+        executeQuery();
+      }
+    });
+  </script>
+</body>
+</html>

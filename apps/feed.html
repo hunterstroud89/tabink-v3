@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Feed</title>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../lib/sql-wasm.js"></script>
+  <script src="../functions/db.js"></script>
+  <script src="../functions/config.js"></script>
+  <script src="../functions/settings.js"></script>
+  
+  <script>
+    // Load SVG icon sprite
+    fetch('../assets/icons/icons.svg')
+      .then(response => response.text())
+      .then(data => {
+        const div = document.createElement('div');
+        div.style.display = 'none';
+        div.innerHTML = data;
+        document.body.insertBefore(div, document.body.firstChild);
+      })
+      .catch(err => console.error('Failed to load icons:', err));
+  </script>
+</head>
+<body>
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-title" style="text-align: left;">
+      <a href="../index.html" style="color: inherit; text-decoration: none; opacity: 0.6;">Home</a>
+      <span style="opacity: 0.4; margin: 0 var(--space-xs);">/</span>
+      <span onclick="showFeedMenu()" style="cursor: pointer;">Feed ▼</span>
+    </div>
+    <div class="topbar-actions">
+      <button onclick="refreshFeeds()">↻ Refresh</button>
+      <button onclick="showManageFeedsPopup()">⚙ Feeds</button>
+    </div>
+  </div>
+
+  <main class="container">
+    <div id="articlesContainer">
+      <p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">
+        No articles yet. Click "⚙ Feeds" to add RSS feeds, then "↻ Refresh" to download.
+      </p>
+    </div>
+  </main>
+
+  <script>
+    let currentFilter = 'all';
+
+        // Helper function to escape HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    // Helper function to decode HTML entities
+    function decodeHtml(html) {
+      const txt = document.createElement('textarea');
+      txt.innerHTML = html;
+      return txt.value;
+    }
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', async () => {
+      await db.init();
+      await addDefaultFeeds();
+      await cleanupOldArticles(); // Auto-cleanup on page load
+      
+      // Check if we should open a specific article
+      const articleToOpen = localStorage.getItem('feed:openArticle');
+      if (articleToOpen) {
+        localStorage.removeItem('feed:openArticle');
+        await renderArticles();
+        // Small delay to ensure articles are rendered
+        setTimeout(() => openArticle(articleToOpen), 100);
+      } else {
+        await renderArticles();
+      }
+    });
+
+    // Auto-cleanup old articles
+    async function cleanupOldArticles() {
+      // Delete articles older than 30 days (except saved ones)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      db.run(`
+        DELETE FROM feed_articles 
+        WHERE saved = 0 
+        AND datetime(pubDate) < datetime('${thirtyDaysAgo.toISOString()}')
+      `);
+      
+      // Keep only 100 most recent unsaved articles
+      const unsavedToDelete = db.all(`
+        SELECT id FROM feed_articles 
+        WHERE saved = 0
+        ORDER BY pubDate DESC
+      `);
+      
+      if (unsavedToDelete.length > 100) {
+        const idsToDelete = unsavedToDelete.slice(100).map(row => row.id);
+        for (const id of idsToDelete) {
+          db.run('DELETE FROM feed_articles WHERE id = ?', [id]);
+        }
+      }
+      
+      // Clean up orphaned images
+      db.run(`
+        DELETE FROM feed_images 
+        WHERE articleId NOT IN (SELECT id FROM feed_articles)
+      `);
+      
+      db.save();
+      console.log('Auto-cleanup complete');
+    }
+
+    // Add default feeds if none exist
+    async function addDefaultFeeds() {
+      const feeds = await db.getFeeds();
+      if (feeds.length === 0) {
+        // Tech & News
+        await db.addFeed('Hacker News', 'https://hnrss.org/frontpage');
+        await db.addFeed('CSS-Tricks', 'https://css-tricks.com/feed/');
+        await db.addFeed('MIT Technology Review', 'https://www.technologyreview.com/feed/');
+        
+        // Design & Creativity
+        await db.addFeed('Colossal', 'https://www.thisiscolossal.com/feed/');
+        await db.addFeed('Behance Featured', 'https://www.behance.net/feeds/projects');
+        
+        // Lifestyle & Productivity
+        await db.addFeed('Brain Pickings', 'https://www.themarginalian.org/feed/');
+        await db.addFeed('Zen Habits', 'https://zenhabits.net/feed/');
+        
+        // Open Source & Tech
+        await db.addFeed('GitHub Blog', 'https://github.blog/feed/');
+        await db.addFeed('Mozilla Blog', 'https://blog.mozilla.org/feed/');
+      }
+    }
+
+    // Fetch and parse RSS feed
+    async function fetchFeed(feedUrl, feedName) {
+      try {
+        // Try multiple methods to fetch RSS
+        const methods = [
+          // Try direct fetch first (works for many feeds)
+          { name: 'Direct', url: feedUrl },
+          // Fallback to proxies
+          { name: 'AllOrigins', url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(feedUrl) },
+          { name: 'ThingProxy', url: 'https://thingproxy.freeboard.io/fetch/' + encodeURIComponent(feedUrl) },
+          { name: 'RSS2JSON', url: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feedUrl) }
+        ];
+        
+        let response, data;
+        let lastError;
+        
+        for (const method of methods) {
+          try {
+            response = await fetch(method.url, {
+              signal: AbortSignal.timeout(10000) // 10 second timeout
+            });
+            
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+            
+            // Handle RSS2JSON format differently
+            if (method.name === 'RSS2JSON') {
+              const json = await response.json();
+              if (json.status !== 'ok') throw new Error('RSS2JSON error');
+              data = convertRSS2JSONToXML(json);
+            } else {
+              data = await response.text();
+            }
+            break;
+          } catch (err) {
+            lastError = err;
+            continue;
+          }
+        }
+        
+        if (!data) {
+          throw lastError || new Error('All methods failed');
+        }
+        
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(data, 'text/xml');
+        
+        const items = xml.querySelectorAll('item');
+        const parsedArticles = [];
+        
+        items.forEach((item, index) => {
+          if (index < 5) { // Limit to 5 items per feed to save space
+            const title = item.querySelector('title')?.textContent || 'Untitled';
+            const link = item.querySelector('link')?.textContent || '';
+            
+            // Try to get full content from multiple sources
+            let content = item.querySelector('content\\:encoded, encoded')?.textContent || 
+                         item.querySelector('description')?.textContent || 
+                         item.querySelector('summary')?.textContent || '';
+            
+            console.log(`Article "${title}": content length = ${content.length} chars`);
+            
+            // Extract images from multiple sources
+            const imageSet = new Set();
+            
+            // 1. Check for media:content tags (YouTube, podcasts, etc.)
+            const mediaContent = item.querySelectorAll('media\\:content, content');
+            mediaContent.forEach(media => {
+              const url = media.getAttribute('url');
+              const medium = media.getAttribute('medium');
+              if (url && (medium === 'image' || url.match(/\.(jpg|jpeg|png|gif|webp)/i))) {
+                imageSet.add(url);
+                console.log(`Found media:content image: ${url}`);
+              }
+            });
+            
+            // 2. Check for media:thumbnail tags
+            const mediaThumbnail = item.querySelectorAll('media\\:thumbnail, thumbnail');
+            mediaThumbnail.forEach(thumb => {
+              const url = thumb.getAttribute('url');
+              if (url) {
+                imageSet.add(url);
+                console.log(`Found media:thumbnail: ${url}`);
+              }
+            });
+            
+            // 3. Check for enclosure tags (common in podcasts and some blogs)
+            const enclosures = item.querySelectorAll('enclosure');
+            enclosures.forEach(enc => {
+              const url = enc.getAttribute('url');
+              const type = enc.getAttribute('type');
+              if (url && type && type.startsWith('image/')) {
+                imageSet.add(url);
+                console.log(`Found enclosure image: ${url}`);
+              }
+            });
+            
+            // 4. Extract images from HTML content
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = content;
+            const contentImages = Array.from(tempDiv.querySelectorAll('img'));
+            contentImages.forEach(img => {
+              const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-lazy-src');
+              if (src && src.startsWith('http')) {
+                imageSet.add(src);
+                console.log(`Found content image: ${src}`);
+              }
+            });
+            
+            // Convert Set to Array and limit to 3 images
+            const images = Array.from(imageSet).slice(0, 3);
+            console.log(`Total images for "${title}": ${images.length}`);
+            
+            // Clean HTML
+            const cleanContent = content
+              .replace(/<script[^>]*>.*?<\/script>/gi, '')
+              .replace(/<style[^>]*>.*?<\/style>/gi, '')
+              .replace(/<img[^>]*>/gi, '')
+              .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, '$2 ($1)')
+              .replace(/<br\s*\/?>/gi, '\n')
+              .replace(/<\/p>/gi, '\n\n')
+              .replace(/<[^>]*>/g, '')
+              .replace(/\n{3,}/g, '\n\n')
+              .trim()
+              .substring(0, 5000); // Limit content to 5000 chars to save space
+            
+            const preview = cleanContent.substring(0, 200);
+            const pubDate = item.querySelector('pubDate')?.textContent || '';
+            
+            // Use guid if available, otherwise use link, otherwise fall back to hash of title+link
+            const guid = item.querySelector('guid')?.textContent || link || (title + feedUrl);
+            
+            // Create stable hash - simple hash function for consistent IDs
+            let hash = 0;
+            for (let i = 0; i < guid.length; i++) {
+              const char = guid.charCodeAt(i);
+              hash = ((hash << 5) - hash) + char;
+              hash = hash & hash; // Convert to 32bit integer
+            }
+            const articleId = 'article_' + Math.abs(hash).toString(36);
+            
+            console.log(`Article "${title}": ID = ${articleId}, GUID = ${guid.substring(0, 50)}`);
+            
+            parsedArticles.push({
+              id: articleId,
+              title,
+              link,
+              content: cleanContent,
+              preview,
+              pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+              feedUrl,
+              feedName,
+              savedAt: new Date().toISOString(),
+              read: false,
+              saved: false,
+              images
+            });
+          }
+        });
+        
+        return parsedArticles;
+      } catch (error) {
+        console.error('Error fetching feed:', feedUrl, error);
+        return [];
+      }
+    }
+    
+    // Convert RSS2JSON format to XML string for parsing
+    function convertRSS2JSONToXML(json) {
+      let xml = '<?xml version="1.0"?><rss><channel>';
+      json.items.forEach(item => {
+        xml += '<item>';
+        xml += `<title><![CDATA[${item.title || ''}]]></title>`;
+        xml += `<link>${item.link || ''}</link>`;
+        xml += `<guid>${item.guid || item.link || ''}</guid>`;
+        xml += `<pubDate>${item.pubDate || ''}</pubDate>`;
+        xml += `<description><![CDATA[${item.description || ''}]]></description>`;
+        if (item.content) xml += `<content:encoded><![CDATA[${item.content}]]></content:encoded>`;
+        if (item.enclosure?.link) xml += `<enclosure url="${item.enclosure.link}"/>`;
+        xml += '</item>';
+      });
+      xml += '</channel></rss>';
+      return xml;
+    }
+
+    // Refresh all feeds
+    async function refreshFeeds() {
+      const feeds = await db.getFeeds();
+      
+      if (feeds.length === 0) {
+        alert('No feeds added yet. Click "⚙ Feeds" to add feeds.');
+        return;
+      }
+
+      const container = document.getElementById('articlesContainer');
+      container.innerHTML = 
+        '<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">Cleaning up old articles...</p>';
+
+      // Auto-cleanup: Delete articles older than 30 days (except saved ones)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      db.run(`
+        DELETE FROM feed_articles 
+        WHERE saved = 0 
+        AND datetime(pubDate) < datetime('${thirtyDaysAgo.toISOString()}')
+      `);
+      
+      // Keep only 100 most recent unsaved articles
+      const unsavedToDelete = db.all(`
+        SELECT id FROM feed_articles 
+        WHERE saved = 0
+        ORDER BY pubDate DESC
+      `);
+      
+      if (unsavedToDelete.length > 100) {
+        const idsToDelete = unsavedToDelete.slice(100).map(row => row.id);
+        for (const id of idsToDelete) {
+          db.run('DELETE FROM feed_articles WHERE id = ?', [id]);
+        }
+      }
+      
+      db.save();
+      console.log('Cleanup complete');
+
+      container.innerHTML = 
+        '<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">Fetching feeds... This may take a moment.</p>';
+
+      let successCount = 0;
+      let totalNewArticles = 0;
+      const failedFeeds = [];
+      
+      for (let i = 0; i < feeds.length; i++) {
+        const feed = feeds[i];
+        container.innerHTML = 
+          `<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">Loading ${feed.name}... (${i + 1}/${feeds.length})</p>`;
+        
+        const feedArticles = await fetchFeed(feed.url, feed.name);
+        
+        if (feedArticles.length > 0) {
+          successCount++;
+          
+          // Save articles without calling db.save() each time
+          for (const article of feedArticles) {
+            db.run(`
+              INSERT OR REPLACE INTO feed_articles 
+              (id, title, link, content, preview, pubDate, feedUrl, feedName, savedAt, read, saved)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+              article.id,
+              article.title,
+              article.link || '',
+              article.content || '',
+              article.preview || '',
+              article.pubDate,
+              article.feedUrl || '',
+              article.feedName || '',
+              article.savedAt,
+              article.read ? 1 : 0,
+              article.saved ? 1 : 0
+            ]);
+            
+            // Save images
+            if (article.images && article.images.length > 0) {
+              db.run('DELETE FROM feed_images WHERE articleId = ?', [article.id]);
+              for (const imageUrl of article.images) {
+                db.run('INSERT INTO feed_images (articleId, imageUrl) VALUES (?, ?)', [article.id, imageUrl]);
+              }
+            }
+            
+            totalNewArticles++;
+          }
+        } else {
+          failedFeeds.push(feed.name);
+        }
+      }
+      
+      // Save database ONCE at the end instead of after each article
+      db.save();
+      console.log('Database saved to localStorage');
+
+      await renderArticles();
+      
+      let message = `Refreshed ${successCount}/${feeds.length} feeds\nCached ${totalNewArticles} articles for offline reading.`;
+      if (failedFeeds.length > 0) {
+        message += `\n\nFailed to load:\n${failedFeeds.join(', ')}`;
+      }
+      
+      if (successCount === 0) {
+        container.innerHTML = 
+          '<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">Failed to load feeds. Check your internet connection and try again.</p>';
+      } else {
+        alert(message);
+      }
+    }
+
+    // Render articles
+    async function renderArticles() {
+      const articles = await db.getArticles();
+      const container = document.getElementById('articlesContainer');
+      
+      if (articles.length === 0) {
+        container.innerHTML = 
+          '<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">No articles yet. Click "⚙ Feeds" to add RSS feeds.</p>';
+        return;
+      }
+
+      // Filter articles
+      let filteredArticles = articles;
+      if (currentFilter === 'unread') {
+        filteredArticles = articles.filter(a => !a.read);
+      } else if (currentFilter === 'read') {
+        filteredArticles = articles.filter(a => a.read);
+      } else if (currentFilter === 'saved') {
+        filteredArticles = articles.filter(a => a.saved);
+      }
+
+      if (filteredArticles.length === 0) {
+        container.innerHTML = 
+          '<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">No articles match this filter.</p>';
+        return;
+      }
+
+      let html = '';
+      filteredArticles.forEach((article) => {
+        const date = new Date(article.pubDate);
+        const timeAgo = getTimeAgo(date);
+        const readStyle = article.read ? 'opacity: 0.6;' : '';
+        const savedBadge = article.saved ? '<span style="color: gold; font-size: 20px; margin-left: 4px;">★</span>' : '';
+        const coverImage = article.images && article.images.length > 0 ? article.images[0] : null;
+        
+        html += `
+          <div class="card" style="margin-bottom: var(--space-md); cursor: pointer; padding: 0; overflow: hidden; ${readStyle}" onclick="openArticle('${article.id}')">
+            ${coverImage ? `
+              <img src="${escapeHtml(coverImage)}" 
+                   style="width: 100%; height: 250px; object-fit: cover; display: block; border-bottom: 2px solid var(--border-color);" 
+                   onerror="this.style.display='none';" />
+            ` : ''}
+            <div style="padding: var(--space-md);">
+              <h3 style="margin: 0 0 var(--space-xs) 0;">
+                ${escapeHtml(article.title)}${savedBadge}
+              </h3>
+              <p class="text-sm">${escapeHtml(article.preview || article.content?.substring(0, 150) || 'No preview')}${(article.preview || article.content)?.length >= 150 ? '...' : ''}</p>
+              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: var(--space-sm);">
+                <span class="text-sm muted">${escapeHtml(article.feedName || 'Unknown')}</span>
+                <span class="text-sm muted">${timeAgo}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // Show feed menu
+    async function showFeedMenu() {
+      const articles = await db.getArticles();
+      const unreadCount = articles.filter(a => !a.read).length;
+      const savedCount = articles.filter(a => a.saved).length;
+      
+      let popupHTML = `
+        <div class="popup active">
+          <div class="popup-header">
+            <h3 class="popup-title">
+              <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-xs);">
+                <use href="#icon-file"></use>
+              </svg>
+              Feed Menu
+            </h3>
+            <button class="close-btn" onclick="hidePopup()"></button>
+          </div>
+          <div class="popup-content">
+            <div class="popup-item${currentFilter === 'all' ? ' active' : ''}" data-number="1">
+              <div style="flex:1;cursor:pointer" onclick="filterFeed('all')">
+                <strong>All Articles</strong>
+                <div class="text-sm muted">${articles.length} total</div>
+              </div>
+            </div>
+            <div class="popup-item${currentFilter === 'unread' ? ' active' : ''}" data-number="2">
+              <div style="flex:1;cursor:pointer" onclick="filterFeed('unread')">
+                <strong>Unread</strong>
+                <div class="text-sm muted">${unreadCount} unread</div>
+              </div>
+            </div>
+            <div class="popup-item${currentFilter === 'saved' ? ' active' : ''}" data-number="3">
+              <div style="flex:1;cursor:pointer" onclick="filterFeed('saved')">
+                <strong>★ Saved</strong>
+                <div class="text-sm muted">${savedCount} saved</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="popup-overlay active" onclick="hidePopup()"></div>
+      `;
+      
+      document.body.insertAdjacentHTML('beforeend', popupHTML);
+    }
+
+    // Filter feed
+    function filterFeed(filter) {
+      currentFilter = filter;
+      hidePopup();
+      renderArticles();
+    }
+
+    // Open article
+    async function openArticle(articleId) {
+      const articles = await db.getArticles();
+      const article = articles.find(a => a.id === articleId);
+      if (!article) return;
+      
+      // Mark as read
+      if (!article.read) {
+        await db.updateArticle(articleId, { read: true });
+      }
+      
+      const dateStr = new Date(article.pubDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const saveIcon = article.saved ? '★' : '☆';
+      
+      let imagesHTML = '';
+      if (article.images && article.images.length > 0) {
+        imagesHTML = '<div style="margin-bottom: var(--space-md);">';
+        article.images.forEach(imgSrc => {
+          imagesHTML += `<img src="${escapeHtml(imgSrc)}" style="max-width: 100%; height: auto; margin-bottom: var(--space-sm); border: 2px solid var(--border-color);" onerror="this.style.display='none'" />`;
+        });
+        imagesHTML += '</div>';
+      }
+      
+      // Format content with proper paragraphs
+      const decodedContent = decodeHtml(article.content || article.preview || 'No content available');
+      const formattedContent = decodedContent
+        .split('\n\n')
+        .map(para => `<p style="margin-bottom: var(--space-md);">${escapeHtml(para)}</p>`)
+        .join('');
+      
+      let popupHTML = `
+        <div class="popup popup-file active">
+          <div class="popup-header" style="align-items: flex-start;">
+            <h3 class="popup-title" style="margin: 0; overflow: visible; white-space: normal; word-wrap: break-word; max-width: calc(100% - 50px);">${escapeHtml(article.title)}</h3>
+            <button class="close-btn" onclick="hidePopup()" style="flex-shrink: 0;"></button>
+          </div>
+          <div class="popup-content" style="max-height: 70vh; overflow-y: auto;">
+            <div style="padding: var(--space-md); line-height: 1.8; font-size: 16px;">
+              ${imagesHTML}
+              ${formattedContent}
+            </div>
+          </div>
+          <div class="popup-footer" style="flex-wrap: wrap; gap: var(--space-xs);">
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; min-width: 0;">${escapeHtml(article.feedName || 'Unknown')} • ${dateStr}</span>
+            <span style="flex-shrink: 0; white-space: nowrap;">
+              <button onclick="toggleSave('${articleId}')" style="background: none; border: none; cursor: pointer; font: inherit; color: inherit; padding: 0; font-size: 18px;">${saveIcon}</button>
+              <button onclick="deleteArticle('${articleId}')" style="background: none; border: none; cursor: pointer; font: inherit; color: inherit; text-decoration: underline; padding: 0; margin-left: 8px;">Delete</button>
+              ${article.link ? ` • <a href="${escapeHtml(article.link)}" target="_blank" style="font: inherit; color: inherit; text-decoration: none;">View online ↗</a>` : ''}
+            </span>
+          </div>
+        </div>
+        <div class="popup-overlay active" onclick="hidePopup()"></div>
+      `;
+      
+      document.body.insertAdjacentHTML('beforeend', popupHTML);
+    }
+
+    // Toggle save
+    async function toggleSave(articleId) {
+      event.stopPropagation();
+      const articles = await db.getArticles();
+      const article = articles.find(a => a.id === articleId);
+      if (article) {
+        await db.updateArticle(articleId, { saved: !article.saved });
+        hidePopup();
+        await renderArticles();
+      }
+    }
+
+    // Delete article
+    async function deleteArticle(articleId) {
+      if (confirm('Delete this article?')) {
+        await db.deleteArticle(articleId);
+        hidePopup();
+        await renderArticles();
+      }
+    }
+
+    // Show manage feeds popup
+    async function showManageFeedsPopup() {
+      const feeds = await db.getFeeds();
+      console.log('Feeds from database:', feeds);
+      console.log('Number of feeds:', feeds.length);
+      
+      let popupHTML = `
+        <div class="popup active">
+          <div class="popup-header">
+            <h3 class="popup-title">Manage Feeds</h3>
+            <button class="close-btn" onclick="hidePopup()"></button>
+          </div>
+          <div class="popup-content">
+            <div style="display: flex; gap: var(--space-xs); margin-bottom: var(--space-md);">
+              <input 
+                type="text" 
+                id="newFeedName" 
+                placeholder="Feed name..."
+                style="flex: 1; padding: var(--space-sm); border: 2px solid var(--border-color); border-radius: var(--radius-sm);"
+              />
+              <input 
+                type="url" 
+                id="newFeedUrl" 
+                placeholder="RSS URL..."
+                style="flex: 2; padding: var(--space-sm); border: 2px solid var(--border-color); border-radius: var(--radius-sm);"
+              />
+              <button onclick="addFeed()" style="padding: var(--space-sm) var(--space-md); background: var(--bg-raised); border: 2px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer;">Add</button>
+            </div>
+            <p class="text-sm muted" style="margin-bottom: var(--space-md);">Click "↻ Refresh" in the main feed view to download articles from your feeds when online.</p>
+      `;
+
+      if (feeds.length === 0) {
+        popupHTML += '<p class="muted text-sm">No feeds yet. Add one above.</p>';
+      } else {
+        feeds.forEach((feed, index) => {
+          popupHTML += `
+            <div class="popup-item" data-number="${index + 1}">
+              <div style="flex: 1;">
+                <strong>${escapeHtml(feed.name)}</strong>
+                <div class="text-sm muted">${escapeHtml(feed.url)}</div>
+              </div>
+              <button onclick="deleteFeed('${feed.url}')" style="padding: 2px 8px; font-size: 1.2em; line-height: 1; border: 2px solid var(--border-color); background: var(--bg-inset); border-radius: 3px; cursor: pointer;">×</button>
+            </div>
+          `;
+        });
+      }
+
+      popupHTML += `
+          </div>
+          <div class="popup-footer">
+            <span>${feeds.length} feed${feeds.length !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+        <div class="popup-overlay active" onclick="hidePopup()"></div>
+      `;
+
+      document.body.insertAdjacentHTML('beforeend', popupHTML);
+    }
+
+    // Add feed
+    async function addFeed() {
+      const nameInput = document.getElementById('newFeedName');
+      const urlInput = document.getElementById('newFeedUrl');
+      const name = nameInput.value.trim();
+      const url = urlInput.value.trim();
+      
+      if (!name || !url) {
+        alert('Please enter both name and URL');
+        return;
+      }
+
+      await db.addFeed(name, url);
+      nameInput.value = '';
+      urlInput.value = '';
+      hidePopup();
+      showManageFeedsPopup();
+    }
+
+    // Delete feed
+    async function deleteFeed(url) {
+      if (confirm('Remove this feed?')) {
+        await db.deleteFeed(url);
+        hidePopup();
+        showManageFeedsPopup();
+      }
+    }
+
+    // Hide popup
+    function hidePopup() {
+      const popup = document.querySelector('.popup');
+      const overlay = document.querySelector('.popup-overlay');
+      if (popup) popup.remove();
+      if (overlay) overlay.remove();
+    }
+
+    // Get time ago
+    function getTimeAgo(date) {
+      const now = new Date();
+      const diffMs = now - date;
+      const diffSecs = Math.floor(diffMs / 1000);
+      const diffMins = Math.floor(diffSecs / 60);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+      
+      if (diffSecs < 60) return `${diffSecs}s ago`;
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 30) return `${diffDays}d ago`;
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
+  </script>
+</body>
+</html>

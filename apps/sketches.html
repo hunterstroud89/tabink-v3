@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Sketches</title>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../lib/sql-wasm.js"></script>
+  <script src="../functions/db.js"></script>
+  <script src="../functions/config.js"></script>
+  <script src="../functions/settings.js"></script>
+  
+  <script>
+    // Load SVG icon sprite
+    fetch('../assets/icons/icons.svg')
+      .then(response => response.text())
+      .then(data => {
+        const div = document.createElement('div');
+        div.style.display = 'none';
+        div.innerHTML = data;
+        document.body.insertBefore(div, document.body.firstChild);
+      })
+      .catch(err => console.error('Failed to load icons:', err));
+  </script>
+  <style>
+    body {
+      max-width: none !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      overflow: hidden;
+    }
+    .topbar {
+      flex-shrink: 0;
+      max-width: none !important;
+      margin: 0 !important;
+      padding-left: var(--space-md) !important;
+      padding-right: var(--space-md) !important;
+    }
+  </style>
+</head>
+<body data-page="sketches">
+  
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-title" style="text-align: left;">
+      <a href="../index.html" style="color: inherit; text-decoration: none; opacity: 0.6;">Home</a>
+      <span style="opacity: 0.4; margin: 0 var(--space-xs);">/</span>
+      <span onclick="showSketchesMenu()" style="cursor: pointer;">Sketches ▼</span>
+    </div>
+    <div class="topbar-actions">
+      <button onclick="saveSketch()">Save</button>
+      <button onclick="createNewSketch()">+ New</button>
+    </div>
+  </div>
+  
+  <!-- Main Canvas View -->
+  <main style="margin: 0; padding: 0; overflow: hidden; position: absolute; top: 53px; left: 0; right: 0; bottom: 0;">
+    <canvas id="drawCanvas" style="display: block; width: 100%; height: 100%; touch-action: none; background: var(--bg-inset); margin: 0; padding: 0; border: none;"></canvas>
+  </main>
+
+  <script>
+    let canvas = null;
+    let ctx = null;
+    let isDrawing = false;
+    let lastX = 0;
+    let lastY = 0;
+    let currentSketchId = null;
+    let sketches = {};
+    
+    function initCanvas() {
+      canvas = document.getElementById('drawCanvas');
+      ctx = canvas.getContext('2d');
+      
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+      
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      
+      // Mouse events
+      canvas.addEventListener('mousedown', startDrawing);
+      canvas.addEventListener('mousemove', draw);
+      canvas.addEventListener('mouseup', stopDrawing);
+      canvas.addEventListener('mouseout', stopDrawing);
+      
+      // Touch events
+      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+      canvas.addEventListener('touchend', stopDrawing);
+      canvas.addEventListener('touchcancel', stopDrawing);
+    }
+    
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const oldData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      
+      ctx.putImageData(oldData, 0, 0);
+      
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+    }
+    
+    function startDrawing(e) {
+      isDrawing = true;
+      const rect = canvas.getBoundingClientRect();
+      lastX = e.clientX - rect.left;
+      lastY = e.clientY - rect.top;
+    }
+    
+    function draw(e) {
+      if (!isDrawing) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      
+      lastX = x;
+      lastY = y;
+    }
+    
+    function stopDrawing() {
+      isDrawing = false;
+    }
+    
+    function handleTouchStart(e) {
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      isDrawing = true;
+      lastX = touch.clientX - rect.left;
+      lastY = touch.clientY - rect.top;
+    }
+    
+    function handleTouchMove(e) {
+      e.preventDefault();
+      if (!isDrawing) return;
+      
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      
+      lastX = x;
+      lastY = y;
+    }
+    
+    function clearCanvas() {
+      if (confirm('Clear this sketch?')) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+    
+    function createNewSketch() {
+      if (confirm('Start a new sketch? Current sketch will be cleared.')) {
+        currentSketchId = Date.now().toString();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+    
+    function newSketch() {
+      currentSketchId = Date.now().toString();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    
+    function saveSketch() {
+      if (!currentSketchId) {
+        currentSketchId = Date.now().toString();
+      }
+      
+      const imageData = canvas.toDataURL('image/png');
+      
+      sketches[currentSketchId] = {
+        id: currentSketchId,
+        image: imageData,
+        created: sketches[currentSketchId]?.created || Date.now(),
+        modified: Date.now()
+      };
+      
+      localStorage.setItem('tabink_sketches', JSON.stringify(sketches));
+      alert('Sketch saved!');
+    }
+    
+    function loadSketches() {
+      const stored = localStorage.getItem('tabink_sketches');
+      sketches = stored ? JSON.parse(stored) : {};
+    }
+    
+    function showSketchesMenu() {
+      const sketchArray = Object.values(sketches).sort((a, b) => b.modified - a.modified);
+      
+      let popupHTML = `
+        <div class="popup active">
+          <div class="popup-header">
+            <h3 class="popup-title">
+              <svg class="icon icon-lg" style="vertical-align: middle; margin-right: var(--space-xs);">
+                <use href="#icon-edit"></use>
+              </svg>
+              All Sketches
+            </h3>
+            <button class="close-btn" onclick="hidePopup()"></button>
+          </div>
+          <div class="popup-content">`;
+      
+      if (sketchArray.length === 0) {
+        popupHTML += '<p class="muted text-sm">No saved sketches yet</p>';
+      } else {
+        sketchArray.forEach((sketch, index) => {
+          const date = new Date(sketch.created).toLocaleDateString();
+          popupHTML += `
+            <div class="popup-item" data-number="${index + 1}" style="display: flex; align-items: center; gap: var(--space-sm);">
+              <img src="${sketch.image}" style="width: 60px; height: 60px; object-fit: cover; border: 2px solid var(--border-color); background: white;" />
+              <div style="flex: 1; cursor: pointer;" onclick="openSketch('${sketch.id}')">
+                <strong>Sketch</strong>
+                <div class="text-sm muted">${date}</div>
+              </div>
+              <button onclick="deleteSketch('${sketch.id}'); event.stopPropagation();" style="padding: 2px 8px; font-size: 1.2em; line-height: 1; border: 2px solid var(--border-color); background: var(--bg-inset); border-radius: 3px; cursor: pointer;">×</button>
+            </div>
+          `;
+        });
+      }
+      
+      popupHTML += `
+          </div>
+          <div class="popup-footer">
+            <span>${sketchArray.length} sketch${sketchArray.length !== 1 ? 'es' : ''}</span>
+            <button onclick="newSketch(); hidePopup();">+ New</button>
+          </div>
+        </div>
+        <div class="popup-overlay active" onclick="hidePopup()"></div>
+      `;
+      
+      document.body.insertAdjacentHTML('beforeend', popupHTML);
+    }
+    
+    function openSketch(id) {
+      hidePopup();
+      currentSketchId = id;
+      const sketch = sketches[id];
+      
+      if (sketch) {
+        const img = new Image();
+        img.onload = () => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
+        };
+        img.src = sketch.image;
+      }
+    }
+    
+    function deleteSketch(id) {
+      if (confirm('Delete this sketch?')) {
+        delete sketches[id];
+        localStorage.setItem('tabink_sketches', JSON.stringify(sketches));
+        hidePopup();
+        showSketchesMenu();
+        
+        if (id === currentSketchId) {
+          newSketch();
+        }
+      }
+    }
+    
+    function hidePopup() {
+      const popup = document.querySelector('.popup');
+      const overlay = document.querySelector('.popup-overlay');
+      if (popup) popup.remove();
+      if (overlay) overlay.remove();
+    }
+    
+    initCanvas();
+    loadSketches();
+    newSketch();
+  </script>
+</body>
+</html>

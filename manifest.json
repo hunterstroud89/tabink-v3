@@ -1,0 +1,26 @@
+{
+  "name": "Tabink",
+  "short_name": "Tabink",
+  "description": "Offline-first productivity app with notes, tasks, sketches, and RSS feed reader",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#e8e8e8",
+  "theme_color": "#e8e8e8",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "prefer_related_applications": false
+}

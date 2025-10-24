@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Settings</title>
+  <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../lib/sql-wasm.js"></script>
+  <script src="../functions/db.js"></script>
+  <script src="../functions/config.js"></script>
+  <script src="../functions/settings.js"></script>
+  
+  <script>
+    // Load SVG icon sprite
+    fetch('../assets/icons/icons.svg')
+      .then(response => response.text())
+      .then(data => {
+        const div = document.createElement('div');
+        div.style.display = 'none';
+        div.innerHTML = data;
+        document.body.insertBefore(div, document.body.firstChild);
+      })
+      .catch(err => console.error('Failed to load icons:', err));
+  </script>
+</head>
+<body data-page="settings">
+  
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-title" style="text-align: left;">
+      <a href="../index.html" style="color: inherit; text-decoration: none; opacity: 0.6;">Home</a>
+      <span style="opacity: 0.4; margin: 0 var(--space-xs);">/</span>
+      <span>Settings</span>
+    </div>
+    <div class="topbar-actions">
+      <button onclick="window.location.href='database.html'">Database</button>
+    </div>
+  </div>
+  
+  <main class="container-tight">
+    
+    <div class="card">
+      <label class="card-label">
+        <input type="checkbox" class="toggle" id="darkMode" onchange="toggleDarkMode()" />
+        Dark Mode
+      </label>
+    </div>
+
+    <div class="card">
+      <div style="margin-bottom: var(--space-sm); font-weight: 500;">Font</div>
+      <div style="display: flex; gap: var(--space-sm);">
+        <button id="fontSans" class="btn" onclick="setFont('sans')" style="flex: 1; font-family: var(--font-sans);">Sans</button>
+        <button id="fontSerif" class="btn" onclick="setFont('serif')" style="flex: 1; font-family: var(--font-serif);">Serif</button>
+        <button id="fontMono" class="btn" onclick="setFont('mono')" style="flex: 1; font-family: var(--font-mono);">Mono</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <label class="card-label">
+        <input type="checkbox" class="toggle" id="capsToggle" onchange="toggleCaps()" />
+        No Caps Mode
+      </label>
+    </div>
+
+    <div class="card">
+      <label class="card-label">
+        <input type="checkbox" class="toggle" id="autosave" checked disabled />
+        Auto-Save Notes
+      </label>
+    </div>
+
+    <div class="card card-divider">
+      <div class="card-row">
+        <span>Database Size</span>
+        <span id="storageInfo" class="text-dim">Calculating...</span>
+      </div>
+      <div class="card-row">
+        <span>Storage Quota</span>
+        <span id="storageAvailable" class="text-dim">Calculating...</span>
+      </div>
+      <div class="card-row">
+        <span>Storage Used</span>
+        <span id="storageUsed" class="text-dim">Calculating...</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <button class="btn btn-block" onclick="checkStorageDetails()">
+        Check Storage Details
+      </button>
+    </div>
+
+    <div class="card">
+      <button class="btn btn-block" onclick="clearStorage()">
+        Clear All Data
+      </button>
+    </div>
+
+    <div class="text-center text-dim font-sm" style="margin-top: var(--space-xl); border: none; background: transparent;">
+      Tabink v3.0<br>
+      SQLite • Offline-First • No Server Required
+    </div>
+
+  </main>
+
+  <script>
+    // Initialize
+    window.addEventListener('DOMContentLoaded', async () => {
+      await db.init();
+      await AppSettings.load();
+      updateUI();
+      calculateStorageSize();
+    });
+    
+    function updateUI() {
+      const theme = AppSettings.get('theme');
+      const font = AppSettings.get('font');
+      const caps = AppSettings.get('caps');
+      
+      document.getElementById('darkMode').checked = (theme === 'dark');
+      document.getElementById('capsToggle').checked = caps;
+      
+      // Highlight active font button
+      ['fontSans', 'fontSerif', 'fontMono'].forEach(id => {
+        document.getElementById(id).classList.remove('btn-primary');
+      });
+      
+      const fontButtonMap = {
+        'sans': 'fontSans',
+        'serif': 'fontSerif',
+        'mono': 'fontMono'
+      };
+      const activeButton = document.getElementById(fontButtonMap[font]);
+      if (activeButton) {
+        activeButton.classList.add('btn-primary');
+      }
+    }
+
+    async function toggleDarkMode() {
+      await AppSettings.toggleTheme();
+      updateUI();
+    }
+
+    async function setFont(font) {
+      await AppSettings.set('font', font);
+      updateUI();
+    }
+
+    async function toggleCaps() {
+      const capsEnabled = document.getElementById('capsToggle').checked;
+      await AppSettings.set('caps', capsEnabled);
+      updateUI();
+    }
+
+    async function calculateStorageSize() {
+      try {
+        // Get IndexedDB database size (where SQLite database is actually stored)
+        const dbSize = await getIndexedDBSize();
+        const sizeKB = (dbSize / 1024).toFixed(2);
+        const sizeMB = (dbSize / 1024 / 1024).toFixed(2);
+        
+        // Display database size from IndexedDB
+        if (sizeMB >= 1) {
+          document.getElementById('storageInfo').textContent = `${sizeMB} MB`;
+        } else {
+          document.getElementById('storageInfo').textContent = `${sizeKB} KB`;
+        }
+        
+        // Try StorageManager API for quota (works in Chrome/Firefox/Edge, not Safari)
+        if (navigator.storage && navigator.storage.estimate) {
+          try {
+            const estimate = await navigator.storage.estimate();
+            console.log('Storage estimate:', estimate);
+            
+            const usageMB = (estimate.usage / 1024 / 1024).toFixed(2);
+            const usageGB = (estimate.usage / 1024 / 1024 / 1024).toFixed(2);
+            const quotaMB = (estimate.quota / 1024 / 1024).toFixed(0);
+            const quotaGB = (estimate.quota / 1024 / 1024 / 1024).toFixed(2);
+            const availableGB = ((estimate.quota - estimate.usage) / 1024 / 1024 / 1024).toFixed(2);
+            
+            // Display quota
+            if (estimate.quota > 1024 * 1024 * 1024) {
+              document.getElementById('storageAvailable').textContent = `${quotaGB} GB total`;
+            } else {
+              document.getElementById('storageAvailable').textContent = `${quotaMB} MB total`;
+            }
+            
+            // Display usage
+            if (estimate.usage > 1024 * 1024 * 1024) {
+              document.getElementById('storageUsed').textContent = `${usageGB} GB (${availableGB} GB free)`;
+            } else {
+              document.getElementById('storageUsed').textContent = `${usageMB} MB (${availableGB} GB free)`;
+            }
+            return; // Success!
+          } catch (err) {
+            console.error('Storage estimate error:', err);
+          }
+        }
+        
+        // Fallback: Safari doesn't support StorageManager API
+        // But you still have IndexedDB storage - estimate based on browser
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const isSafari = /Safari/i.test(navigator.userAgent) && !/Chrome/i.test(navigator.userAgent);
+        const isFireTablet = /Silk/i.test(navigator.userAgent);
+        
+        if (isFireTablet) {
+          document.getElementById('storageAvailable').textContent = '~200 MB (Fire tablet)';
+          document.getElementById('storageUsed').textContent = `${sizeMB} MB used`;
+        } else if (isMobile) {
+          document.getElementById('storageAvailable').textContent = '~500 MB (mobile)';
+          document.getElementById('storageUsed').textContent = `${sizeMB} MB used`;
+        } else if (isSafari) {
+          document.getElementById('storageAvailable').textContent = '~1 GB (Safari)';
+          document.getElementById('storageUsed').textContent = `${sizeMB} MB used`;
+        } else {
+          document.getElementById('storageAvailable').textContent = '~10 GB (desktop)';
+          document.getElementById('storageUsed').textContent = `${sizeMB} MB used`;
+        }
+        
+        console.log('Using IndexedDB with estimated quota (StorageManager API not available)');
+      } catch (e) {
+        console.error('Storage calculation error:', e);
+        document.getElementById('storageInfo').textContent = 'N/A';
+        document.getElementById('storageAvailable').textContent = 'N/A';
+        document.getElementById('storageUsed').textContent = 'N/A';
+      }
+    }
+    
+    // Get actual IndexedDB size
+    async function getIndexedDBSize() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('tabink', 1);
+        
+        request.onsuccess = (event) => {
+          const db = event.target.result;
+          const transaction = db.transaction(['database'], 'readonly');
+          const store = transaction.objectStore('database');
+          const getRequest = store.get('sqliteDb');
+          
+          getRequest.onsuccess = () => {
+            db.close();
+            if (getRequest.result) {
+              // Result is a Uint8Array - get its byte length
+              resolve(getRequest.result.byteLength || getRequest.result.length || 0);
+            } else {
+              resolve(0);
+            }
+          };
+          
+          getRequest.onerror = () => {
+            db.close();
+            resolve(0);
+          };
+        };
+        
+        request.onerror = () => {
+          resolve(0);
+        };
+      });
+    }
+    
+    async function checkStorageDetails() {
+      console.clear();
+      console.log('=== Storage Check ===');
+      console.log('User Agent:', navigator.userAgent);
+      console.log('Browser:', getBrowserInfo());
+      console.log('navigator.storage exists:', !!navigator.storage);
+      
+      let message = 'Storage Details:\n\n';
+      message += `Browser: ${getBrowserInfo()}\n\n`;
+      
+      if (navigator.storage) {
+        console.log('navigator.storage.estimate exists:', !!navigator.storage.estimate);
+        
+        if (navigator.storage.estimate) {
+          try {
+            const estimate = await navigator.storage.estimate();
+            console.log('Raw estimate:', estimate);
+            
+            const quotaGB = (estimate.quota / 1024 / 1024 / 1024).toFixed(2);
+            const usageMB = (estimate.usage / 1024 / 1024).toFixed(2);
+            const availableGB = ((estimate.quota - estimate.usage) / 1024 / 1024 / 1024).toFixed(2);
+            
+            message += `✅ StorageManager API Available\n\n`;
+            message += `Total Quota: ${quotaGB} GB\n`;
+            message += `Used: ${usageMB} MB\n`;
+            message += `Available: ${availableGB} GB\n\n`;
+            message += `This will work correctly on Android Chrome!`;
+          } catch (err) {
+            console.error('Error calling estimate():', err);
+            message += `⚠️ API Error: ${err.message}`;
+          }
+        } else {
+          message += `❌ StorageManager API Not Available\n\n`;
+          message += `Safari doesn't support navigator.storage.estimate()\n\n`;
+          message += `Estimated limits shown instead:\n`;
+          message += `• Mobile: ~500 MB\n`;
+          message += `• Desktop Safari: ~1 GB\n`;
+          message += `• Desktop Chrome: ~10 GB\n\n`;
+          message += `This will work correctly when you use the app on Android Chrome!`;
+        }
+      } else {
+        message += `❌ navigator.storage not available\n\n`;
+        message += `Using estimated storage limits based on typical browser behavior.`;
+      }
+      
+      alert(message);
+      await calculateStorageSize();
+    }
+    
+    function getBrowserInfo() {
+      const ua = navigator.userAgent;
+      if (/Android/i.test(ua)) {
+        if (/Chrome/i.test(ua)) return 'Android Chrome';
+        return 'Android Browser';
+      }
+      if (/iPhone|iPad|iPod/i.test(ua)) return 'iOS Safari';
+      if (/Safari/i.test(ua) && !/Chrome/i.test(ua)) return 'Desktop Safari';
+      if (/Chrome/i.test(ua)) return 'Desktop Chrome';
+      if (/Firefox/i.test(ua)) return 'Firefox';
+      if (/Edge/i.test(ua)) return 'Edge';
+      return 'Unknown Browser';
+    }
+
+    function clearStorage() {
+      if (confirm('WARNING: This will delete ALL data including notes, tasks, and feeds. Continue?')) {
+        if (confirm('Are you absolutely sure? This cannot be undone!')) {
+          localStorage.removeItem('tabink_db');
+          alert('All data cleared. Reloading...');
+          window.location.href = '../index.html';
+        }
+      }
+    }
+  </script>
+</body>
+</html>
