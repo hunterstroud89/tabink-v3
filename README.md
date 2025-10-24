@@ -99,6 +99,8 @@ cordova requirements
 
 ### Files App (Notes & Sketches)
 
+The Files app is a **unified browser** for both notes and sketches. You don't need separate apps - everything is in one place!
+
 **Creating a Note:**
 1. Tap **Files** widget or app icon
 2. Tap **"+ New Note"**
@@ -119,7 +121,8 @@ cordova requirements
 - Tap "Open in Files ↗" to see full file browser
 
 **Organizing Files:**
-- Files shown in grid view (newest first)
+- Files shown in unified grid view (newest first)
+- Notes show text icon, sketches show pencil icon
 - Click file icon to open/edit
 - Delete button (trash icon) on each file
 - All files stored locally - no cloud sync
@@ -284,11 +287,12 @@ cordova requirements
 
 ## ✨ Features
 
-### 📝 Files App (Notes & Sketches)
+### 📝 Files App (Unified Notes & Sketches)
 - **Rich Text Notes**: Write and organize notes with auto-save
 - **Sketching Canvas**: Draw and save sketches with touch support
-- **Unified Browser**: View all files in one grid-based interface
-- **Quick Edit**: Edit notes/sketches from home screen widgets
+- **Unified Browser**: View all files (notes + sketches) in one grid-based interface
+- **Quick Edit**: Edit files from home screen widgets
+- **Smart Icons**: Notes show text icon, sketches show pencil icon
 - **Export/Import**: Back up individual files or entire database
 
 ### ✅ Tasks App
@@ -921,9 +925,10 @@ MIT License - Feel free to use, modify, and distribute.
 ## 📞 Support
 
 For questions or issues:
-- Check `APK_DEPLOYMENT_CHECKLIST.md` for deployment help
-- Check `ICON_CREATION_GUIDE.md` for icon creation
-- Review inline code comments for technical details
+- Check the **Developer Quick Reference** section for common tasks
+- Review **User Guide** for app usage instructions
+- Check inline code comments for technical details
+- All documentation is in this README - no separate docs needed
 
 ---
 
