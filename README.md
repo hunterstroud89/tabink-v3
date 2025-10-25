@@ -37,6 +37,8 @@ A Newton MessagePad-inspired PWA featuring notes, sketches, tasks, RSS feed read
 
 ## 🚀 Developer Quick Reference
 
+[↑ Back to top](#tabink)
+
 ### Build APK
 ```bash
 cd /Applications/MAMP/htdocs/tabink-v3/cordova-build
@@ -113,6 +115,8 @@ cordova requirements
 ---
 
 ## 📖 User Guide
+
+[↑ Back to top](#tabink)
 
 ### Getting Started
 
@@ -312,6 +316,8 @@ The Files app is a **unified browser** for both notes and sketches. You don't ne
 
 ## ✨ Features
 
+[↑ Back to top](#tabink)
+
 ### 📝 Files App (Unified Notes & Sketches)
 - **Rich Text Notes**: Write and organize notes with auto-save
 - **Sketching Canvas**: Draw and save sketches with touch support
@@ -349,6 +355,8 @@ The Files app is a **unified browser** for both notes and sketches. You don't ne
 ---
 
 ## 🏗️ Architecture
+
+[↑ Back to top](#tabink)
 
 ### Tech Stack
 
@@ -410,6 +418,8 @@ tabink-v3/
 ---
 
 ## 💾 Database Schema
+
+[↑ Back to top](#tabink)
 
 ### Tables
 
@@ -495,6 +505,8 @@ CREATE TABLE rss_feeds (
 
 ## 🗄️ Storage System
 
+[↑ Back to top](#tabink)
+
 ### Storage Layers
 
 1. **IndexedDB** (Primary Storage)
@@ -522,6 +534,8 @@ Supports StorageManager API (Chrome/Android) with intelligent fallbacks for Safa
 
 ## 🎨 Design Philosophy
 
+[↑ Back to top](#tabink)
+
 ### E-Ink Optimized
 - No anti-aliasing (`-webkit-font-smoothing: none`)
 - High contrast, minimal color palette
@@ -543,6 +557,8 @@ Supports StorageManager API (Chrome/Android) with intelligent fallbacks for Safa
 ---
 
 ## 🚀 Getting Started
+
+[↑ Back to top](#tabink)
 
 ### Local Development
 
@@ -580,6 +596,8 @@ The app will:
 ---
 
 ## 📱 APK Deployment
+
+[↑ Back to top](#tabink)
 
 ### Build APK with Cordova
 
@@ -645,6 +663,8 @@ cordova-build/
 
 ## 🔧 Configuration
 
+[↑ Back to top](#tabink)
+
 ### Manifest.json
 
 Customize app metadata:
@@ -685,6 +705,8 @@ async function addDefaultFeeds() {
 
 ## 🛠️ Database Tools
 
+[↑ Back to top](#tabink)
+
 Access via **Database** app (database.html):
 
 1. **Add Example Data** - Populate with sample tasks, notes, sketches
@@ -710,6 +732,8 @@ Access via **Database** app (database.html):
 ---
 
 ## 🎯 Feature Highlights
+
+[↑ Back to top](#tabink)
 
 ### Widget System
 
@@ -742,6 +766,8 @@ Home screen widgets provide quick access:
 ---
 
 ## 🐛 Troubleshooting
+
+[↑ Back to top](#tabink)
 
 ### APK Build Errors
 
@@ -856,6 +882,8 @@ If still showing, Fire OS may override. Try:
 
 ## 📊 Performance
 
+[↑ Back to top](#tabink)
+
 ### App Size
 - **HTML/CSS/JS**: ~100 KB
 - **SQL.js WASM**: ~1 MB
@@ -877,6 +905,8 @@ If still showing, Fire OS may override. Try:
 
 ## 🔐 Privacy & Security
 
+[↑ Back to top](#tabink)
+
 - ✅ **100% Offline**: All data stored locally
 - ✅ **No Analytics**: No tracking or telemetry
 - ✅ **No Cloud**: No external servers or sync
@@ -893,6 +923,8 @@ If still showing, Fire OS may override. Try:
 ---
 
 ## 🗺️ Roadmap
+
+[↑ Back to top](#tabink)
 
 ### Planned Features
 - [ ] End-to-end encryption option
@@ -915,6 +947,8 @@ If still showing, Fire OS may override. Try:
 
 ## 🤝 Contributing
 
+[↑ Back to top](#tabink)
+
 This is a personal project, but suggestions and bug reports are welcome!
 
 ### Reporting Issues
@@ -934,11 +968,15 @@ This is a personal project, but suggestions and bug reports are welcome!
 
 ## 📄 License
 
+[↑ Back to top](#tabink)
+
 MIT License - Feel free to use, modify, and distribute.
 
 ---
 
 ## 🙏 Acknowledgments
+
+[↑ Back to top](#tabink)
 
 - **ePaperCSS**: Base CSS framework by marcomattes
 - **Feather Icons**: Icon set by Cole Bemis
@@ -948,6 +986,8 @@ MIT License - Feel free to use, modify, and distribute.
 ---
 
 ## 📞 Support
+
+[↑ Back to top](#tabink)
 
 For questions or issues:
 - Check the **Developer Quick Reference** section for common tasks
