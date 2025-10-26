@@ -91,23 +91,6 @@
       </button>
     </div>
 
-    <!-- Database Backup Section -->
-    <div class="card">
-      <div style="margin-bottom: var(--space-sm); font-weight: 500;">Database Backup</div>
-      <div style="display: flex; gap: var(--space-sm); flex-direction: column;">
-        <button class="btn btn-block" onclick="exportDatabase()">
-          ⬇ Export Database
-        </button>
-        <button class="btn btn-block" onclick="importDatabase()">
-          ⬆ Import Database
-        </button>
-        <button class="btn btn-block" onclick="uploadToServer()" id="uploadBtn" style="display: none;">
-          ☁ Upload to Server
-        </button>
-      </div>
-      <div id="backupStatus" style="margin-top: var(--space-sm); font-size: 0.85rem; color: var(--text-dim); text-align: center;"></div>
-    </div>
-
     <div class="card">
       <button class="btn btn-block" onclick="clearStorage()">
         Clear All Data
@@ -128,15 +111,7 @@
       await AppSettings.load();
       updateUI();
       calculateStorageSize();
-      checkServerConfig();
     });
-    
-    function checkServerConfig() {
-      // Show upload button if server is configured
-      if (typeof CONFIG !== 'undefined' && CONFIG.SERVER_URL) {
-        document.getElementById('uploadBtn').style.display = 'block';
-      }
-    }
     
     function updateUI() {
       const theme = AppSettings.get('theme');
@@ -358,106 +333,54 @@
       }
     }
 
-    // Export database to file
-    function exportDatabase() {
-      if (typeof db !== 'undefined' && db.db) {
-        db.exportDB();
-        setBackupStatus('✓ Database exported successfully', 'success');
-      } else {
-        alert('Database not ready. Please wait and try again.');
-      }
-    }
-
-    // Import database from file
-    function importDatabase() {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = '.db';
-      input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        if (!confirm('This will replace your current database. Continue?')) {
-          return;
-        }
-
-        try {
-          await db.importDB(file);
-          setBackupStatus('✓ Database imported successfully', 'success');
-          alert('Database imported! Reloading...');
-          location.reload();
-        } catch (error) {
-          console.error('Import error:', error);
-          setBackupStatus('✗ Import failed: ' + error.message, 'error');
-          alert('Import failed: ' + error.message);
-        }
-      };
-      input.click();
-    }
-
-    // Upload database to server
-    async function uploadToServer() {
-      if (!CONFIG.SERVER_URL) {
-        alert('Server URL not configured. Please set CONFIG.SERVER_URL in config.js');
-        return;
-      }
-
-      if (!confirm('Upload current database to server?')) {
-        return;
-      }
-
-      try {
-        setBackupStatus('Uploading to server...', 'info');
-
-        // Export database as blob
-        const data = db.db.export();
-        const blob = new Blob([data], { type: 'application/x-sqlite3' });
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-        const file = new File([blob], `tabink-backup-${timestamp}.db`, { type: 'application/x-sqlite3' });
-
-        // Upload to server
-        const formData = new FormData();
-        formData.append('database', file);
-
-        const response = await fetch(`${CONFIG.SERVER_URL}/backup.php`, {
-          method: 'POST',
-          body: formData
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-          setBackupStatus(`✓ Uploaded to server: ${result.filename}`, 'success');
-          alert(`✓ Backup uploaded successfully!\n\nFile: ${result.filename}\nSize: ${(result.size / 1024).toFixed(2)} KB`);
-        } else {
-          throw new Error(result.error || 'Upload failed');
-        }
-      } catch (error) {
-        console.error('Upload error:', error);
-        setBackupStatus('✗ Upload failed: ' + error.message, 'error');
-        alert('Upload failed: ' + error.message);
-      }
-    }
-
-    // Set backup status message
-    function setBackupStatus(message, type = 'info') {
-      const statusEl = document.getElementById('backupStatus');
-      statusEl.textContent = message;
+    // Show storage details
+    function showStoragePopup() {
+      const popupHTML = `
+        <div class="popup active">
+          <div class="popup-header">
+            <h3 class="popup-title">Storage Details</h3>
+            <button class="close-btn" onclick="hidePopup()"></button>
+          </div>
+          <div class="popup-content">
+            <div class="popup-item">
+              <div style="flex:1;">
+                <strong>Database Size</strong>
+                <div class="text-sm muted" id="popupDbSize">Calculating...</div>
+              </div>
+            </div>
+            <div class="popup-item">
+              <div style="flex:1;">
+                <strong>Storage Used</strong>
+                <div class="text-sm muted" id="popupStorageUsed">Calculating...</div>
+              </div>
+            </div>
+            <div class="popup-item">
+              <div style="flex:1;">
+                <strong>Storage Available</strong>
+                <div class="text-sm muted" id="popupStorageAvailable">Calculating...</div>
+              </div>
+            </div>
+            <div class="popup-item">
+              <div style="flex:1;">
+                <strong>Browser</strong>
+                <div class="text-sm muted">${getBrowserInfo()}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="popup-overlay active" onclick="hidePopup()"></div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', popupHTML);
       
-      // Set color based on type
-      const colors = {
-        success: 'var(--green)',
-        error: 'var(--red)',
-        info: 'var(--text-dim)'
-      };
-      statusEl.style.color = colors[type] || colors.info;
-      
-      // Clear after 5 seconds
-      if (type !== 'info') {
-        setTimeout(() => {
-          statusEl.textContent = '';
-        }, 5000);
-      }
+      // Copy current values
+      document.getElementById('popupDbSize').textContent = document.getElementById('storageInfo').textContent;
+      document.getElementById('popupStorageUsed').textContent = document.getElementById('storageUsed').textContent;
+      document.getElementById('popupStorageAvailable').textContent = document.getElementById('storageAvailable').textContent;
+    }
+    
+    function hidePopup() {
+      document.querySelector('.popup')?.remove();
+      document.querySelector('.popup-overlay')?.remove();
     }
   </script>
 </body>

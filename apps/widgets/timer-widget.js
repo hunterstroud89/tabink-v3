@@ -7,6 +7,34 @@ window.TimerWidget = {
   endTime: null,
   isRunning: false,
   
+  // Initialize - restore state from localStorage
+  init() {
+    const saved = localStorage.getItem('timer:state');
+    if (saved) {
+      const state = JSON.parse(saved);
+      this.endTime = state.endTime;
+      this.isRunning = state.isRunning;
+      
+      // If timer was running and hasn't expired, restart the interval
+      if (this.isRunning && this.endTime > Date.now()) {
+        this.startInterval();
+      } else if (this.endTime <= Date.now()) {
+        // Timer expired while on another page
+        this.isRunning = false;
+        this.saveState();
+      }
+    }
+    this.updateDisplay();
+  },
+  
+  // Save state to localStorage
+  saveState() {
+    localStorage.setItem('timer:state', JSON.stringify({
+      endTime: this.endTime,
+      isRunning: this.isRunning
+    }));
+  },
+  
   // Toggle timer sidebar
   toggle() {
     const existing = document.querySelector('.timer-sidebar');
@@ -20,40 +48,28 @@ window.TimerWidget = {
   // Open timer sidebar
   open() {
     const sidebarHTML = `
-      <div class="timer-sidebar" style="position: fixed; top: 0; right: 0; bottom: 0; width: 320px; background: var(--bg-primary); border-left: 2px solid var(--border-color); z-index: 1000; display: flex; flex-direction: column; box-shadow: -4px 0 8px rgba(0,0,0,0.1);">
+      <div class="timer-sidebar" style="position: fixed; top: 0; right: 0; bottom: 0; width: 280px; background: var(--bg-primary); border-left: 2px solid var(--border-color); z-index: 1000; display: flex; flex-direction: column; box-shadow: -4px 0 8px rgba(0,0,0,0.1);">
         <div style="display: flex; justify-content: space-between; align-items: center; padding: var(--space-md); border-bottom: 2px solid var(--border-color);">
           <h2 style="margin: 0; font-size: 1rem; font-weight: bold;">Timer</h2>
           <button onclick="TimerWidget.close()" style="padding: var(--space-xs) var(--space-sm); min-height: auto; font-size: 1.2rem; line-height: 1;">✕</button>
         </div>
         
-        <div style="flex: 1; padding: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-lg); overflow-y: auto;">
+        <div style="padding: var(--space-lg);">
           <!-- Display -->
-          <div id="timerDisplay" style="font-size: 48px; font-weight: bold; text-align: center; font-family: var(--font-mono); padding: var(--space-lg) 0;">25:00</div>
+          <div id="timerDisplay" style="font-size: 48px; font-weight: bold; text-align: center; font-family: var(--font-mono); padding: var(--space-lg) 0; margin-bottom: var(--space-lg);">25:00</div>
           
           <!-- Quick Presets -->
-          <div>
+          <div style="margin-bottom: var(--space-md);">
             <label class="bold" style="display: block; margin-bottom: var(--space-sm);">Quick Start</label>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm);">
-              <button onclick="TimerWidget.setTimer(5)">5 min</button>
-              <button onclick="TimerWidget.setTimer(10)">10 min</button>
-              <button onclick="TimerWidget.setTimer(15)">15 min</button>
-              <button onclick="TimerWidget.setTimer(20)">20 min</button>
-              <button onclick="TimerWidget.setTimer(25)">25 min</button>
-              <button onclick="TimerWidget.setTimer(30)">30 min</button>
-            </div>
-          </div>
-          
-          <!-- Custom Time -->
-          <div>
-            <label class="bold" style="display: block; margin-bottom: var(--space-sm);">Custom Time</label>
-            <div style="display: flex; gap: var(--space-sm); align-items: center;">
-              <input type="number" id="customMinutes" min="1" max="999" placeholder="Minutes" style="flex: 1; padding: var(--space-sm); border: 2px solid var(--border-color); border-radius: var(--radius-sm);">
-              <button onclick="TimerWidget.setCustomTimer()">Set</button>
+            <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+              <button onclick="TimerWidget.setAndStart(15)">15 minutes</button>
+              <button onclick="TimerWidget.setAndStart(25)">25 minutes</button>
+              <button onclick="TimerWidget.setAndStart(45)">45 minutes</button>
             </div>
           </div>
           
           <!-- Controls -->
-          <div style="display: flex; gap: var(--space-sm); margin-top: auto;">
+          <div style="display: flex; gap: var(--space-sm);">
             <button id="startStopBtn" onclick="TimerWidget.startStop()" style="flex: 1;">Start</button>
             <button onclick="TimerWidget.reset()">Reset</button>
           </div>
@@ -78,17 +94,32 @@ window.TimerWidget = {
   setTimer(minutes) {
     this.reset();
     this.endTime = Date.now() + (minutes * 60 * 1000);
+    this.saveState();
     this.updateDisplay();
   },
   
-  // Set custom timer
-  setCustomTimer() {
-    const input = document.getElementById('customMinutes');
-    const minutes = parseInt(input.value);
-    if (minutes && minutes > 0) {
-      this.setTimer(minutes);
-      input.value = '';
+  // Set timer and start it
+  setAndStart(minutes) {
+    this.setTimer(minutes);
+    if (!this.isRunning) {
+      this.startStop();
     }
+  },
+  
+  // Start the interval (internal helper)
+  startInterval() {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+    }
+    
+    this.timerInterval = setInterval(() => {
+      this.updateDisplay();
+      
+      const remaining = this.endTime - Date.now();
+      if (remaining <= 0) {
+        this.timerComplete();
+      }
+    }, 100);
   },
   
   // Start/Stop timer
@@ -98,7 +129,10 @@ window.TimerWidget = {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
       this.isRunning = false;
-      document.getElementById('startStopBtn').textContent = 'Start';
+      this.saveState();
+      
+      const btn = document.getElementById('startStopBtn');
+      if (btn) btn.textContent = 'Start';
     } else {
       // Start
       if (!this.endTime || this.endTime <= Date.now()) {
@@ -106,16 +140,12 @@ window.TimerWidget = {
       }
       
       this.isRunning = true;
-      document.getElementById('startStopBtn').textContent = 'Stop';
+      this.saveState();
       
-      this.timerInterval = setInterval(() => {
-        this.updateDisplay();
-        
-        const remaining = this.endTime - Date.now();
-        if (remaining <= 0) {
-          this.timerComplete();
-        }
-      }, 100);
+      const btn = document.getElementById('startStopBtn');
+      if (btn) btn.textContent = 'Stop';
+      
+      this.startInterval();
     }
   },
   
@@ -124,7 +154,8 @@ window.TimerWidget = {
     clearInterval(this.timerInterval);
     this.timerInterval = null;
     this.isRunning = false;
-    this.endTime = Date.now() + (25 * 60 * 1000); // Default 25 minutes
+    this.endTime = null;
+    this.saveState();
     
     const btn = document.getElementById('startStopBtn');
     if (btn) btn.textContent = 'Start';
@@ -137,6 +168,7 @@ window.TimerWidget = {
     clearInterval(this.timerInterval);
     this.timerInterval = null;
     this.isRunning = false;
+    this.saveState();
     
     const btn = document.getElementById('startStopBtn');
     if (btn) btn.textContent = 'Start';
@@ -152,12 +184,23 @@ window.TimerWidget = {
     const display = document.getElementById('timerDisplay');
     const button = document.getElementById('timerButton');
     
+    // If timer hasn't been set, show default 25:00
+    if (!this.endTime && !this.isRunning) {
+      if (display) {
+        display.textContent = '25:00';
+      }
+      if (button) {
+        button.innerHTML = `<svg class="icon" style="vertical-align: middle;"><use href="#icon-clock"></use></svg>`;
+      }
+      return;
+    }
+    
     if (!this.endTime) {
       this.endTime = Date.now() + (25 * 60 * 1000);
     }
     
     const remaining = Math.max(0, this.endTime - Date.now());
-    const totalSeconds = Math.ceil(remaining / 1000);
+    const totalSeconds = Math.floor(remaining / 1000);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     
@@ -180,5 +223,5 @@ window.TimerWidget = {
 
 // Initialize
 window.addEventListener('DOMContentLoaded', () => {
-  TimerWidget.updateDisplay();
+  TimerWidget.init();
 });

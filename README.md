@@ -203,9 +203,17 @@ The Files app is a **unified browser** for both notes and sketches. You don't ne
 
 **Refreshing Feeds:**
 1. Open Feed app
-2. Tap **"↻ Refresh All Feeds"**
-3. Wait for success message
+2. Tap **"↻ Refresh"**
+3. App downloads **ONLY NEW** articles from server
 4. New articles appear at top
+5. Old articles automatically deleted when limit reached (default: 500 articles)
+
+**Article Management:**
+- **Incremental Sync**: Only new articles are downloaded (not all articles every time)
+- **Auto-Limit**: Keeps only 500 most recent unsaved articles (configurable in `functions/config.js`)
+- **Auto-Cleanup**: Deletes articles older than 30 days (except saved ones)
+- **Saved Articles**: Never deleted - marked with ★ are permanent
+- **Storage-Friendly**: Server caches images so app stays fast and light
 
 **Removing Feeds:**
 1. Tap **"Manage Feeds"**
@@ -665,6 +673,32 @@ cordova-build/
 
 [↑ Back to top](#tabink)
 
+### App Configuration
+
+Edit `functions/config.js` to customize app behavior:
+
+```javascript
+const CONFIG = {
+  // Server configuration
+  SERVER_URL: 'https://www.hunter-stroud.com/tabink-server',
+  USE_SERVER_FEEDS: true,
+  
+  // Article management
+  MAX_ARTICLES: 500,           // Maximum unsaved articles to keep
+  MAX_ARTICLE_AGE_DAYS: 30,    // Auto-delete articles older than this
+  
+  // Backup settings
+  AUTO_BACKUP: false,
+  BACKUP_INTERVAL: 24          // Hours between auto-backups
+};
+```
+
+**Article Limits:**
+- `MAX_ARTICLES`: Default 500 - keeps database small and fast
+- Saved articles (★) are **never** deleted
+- Oldest unsaved articles are removed when limit is reached
+- Change to 1000 for more storage, or 200 for minimal footprint
+
 ### Manifest.json
 
 Customize app metadata:
@@ -691,15 +725,11 @@ const ASSETS_TO_CACHE = [
 
 ### Default RSS Feeds
 
-Edit in `/apps/feed.html`:
-```javascript
-async function addDefaultFeeds() {
-  const defaultFeeds = [
-    { name: 'Your Feed', url: 'https://example.com/feed' }
-  ];
-  // ...
-}
+Server-managed feeds can be configured at:
 ```
+https://www.hunter-stroud.com/tabink-server/
+```
+Click **"Feeds"** tab → **"Add Feed"** to add new RSS sources
 
 ---
 

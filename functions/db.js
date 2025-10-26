@@ -382,7 +382,15 @@ class TabinkDB {
 
   // FEED Methods
   async getArticles() {
+    // Sort by pubDate in descending order (newest first)
+    // Remove datetime() wrapper as it may not parse ISO dates correctly in Safari
     const articles = this.all('SELECT * FROM feed_articles ORDER BY pubDate DESC');
+    
+    console.log('Debug: First 3 articles from DB:', articles.slice(0, 3).map(a => ({
+      title: a.title.substring(0, 50),
+      pubDate: a.pubDate,
+      feedName: a.feedName
+    })));
     
     // Add images to each article
     for (const article of articles) {

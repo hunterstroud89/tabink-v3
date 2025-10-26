@@ -22,6 +22,12 @@ const CONFIG = {
   // Backup interval (in hours)
   BACKUP_INTERVAL: 24,
   
+  // Maximum number of unsaved articles to keep (saved articles are never deleted)
+  MAX_ARTICLES: 500,
+  
+  // Auto-delete articles older than X days (except saved ones)
+  MAX_ARTICLE_AGE_DAYS: 30,
+  
   // Helper to get storage path for an app
   getStoragePath: function(appName) {
     return `${this.STORAGE_PATH}/${appName}`;
@@ -30,7 +36,7 @@ const CONFIG = {
   // Get feed URL (use server proxy if configured)
   getFeedURL: function(rssFeedUrl) {
     if (this.USE_SERVER_FEEDS && this.SERVER_URL) {
-      return `${this.SERVER_URL}/feed.php?url=${encodeURIComponent(rssFeedUrl)}`;
+      return `${this.SERVER_URL}/server.php?action=feed&url=${encodeURIComponent(rssFeedUrl)}`;
     }
     return rssFeedUrl;
   },
@@ -38,7 +44,7 @@ const CONFIG = {
   // Get backup endpoint
   getBackupURL: function() {
     if (this.SERVER_URL) {
-      return `${this.SERVER_URL}/backup.php`;
+      return `${this.SERVER_URL}/server.php?action=backup`;
     }
     return null;
   }

@@ -3,11 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>Documentation</title>
   <link rel="stylesheet" href="../assets/style.css" />
-  
-  <!-- Marked.js for Markdown parsing (local copy for offline use) -->
+  <script src="../lib/sql-wasm.js"></script>
+  <script src="../functions/db.js"></script>
+  <script src="../functions/config.js"></script>
+  <script src="../functions/settings.js"></script>
   <script src="../lib/marked.min.js"></script>
   
   <script>
@@ -22,208 +23,38 @@
       })
       .catch(err => console.error('Failed to load icons:', err));
   </script>
-  
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
-    }
-    
-    .topbar {
-      margin: 0;
-      flex-shrink: 0;
-    }
-    
-    #readmeContent {
-      flex: 1;
-      overflow-y: auto;
-      padding: var(--space-lg);
-      max-width: 800px;
-      margin: 0 auto;
-      width: 100%;
-      box-sizing: border-box;
-    }
-    
-    /* Style markdown content */
-    #readmeContent h1 {
-      font-size: 2rem;
-      margin-top: var(--space-xl);
-      margin-bottom: var(--space-md);
-      padding-bottom: var(--space-sm);
-      border-bottom: 2px solid var(--border-color);
-    }
-    
-    #readmeContent h2 {
-      font-size: 1.5rem;
-      margin-top: var(--space-lg);
-      margin-bottom: var(--space-sm);
-    }
-    
-    #readmeContent h3 {
-      font-size: 1.25rem;
-      margin-top: var(--space-md);
-      margin-bottom: var(--space-sm);
-    }
-    
-    #readmeContent p {
-      line-height: 1.6;
-      margin-bottom: var(--space-md);
-    }
-    
-    #readmeContent ul, #readmeContent ol {
-      margin-bottom: var(--space-md);
-      padding-left: var(--space-lg);
-    }
-    
-    #readmeContent li {
-      margin-bottom: var(--space-xs);
-      line-height: 1.5;
-    }
-    
-    #readmeContent code {
-      background: var(--bg-inset);
-      padding: 2px 6px;
-      border-radius: var(--radius-sm);
-      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
-      font-size: 0.85em;
-      border: 1px solid var(--border-color);
-    }
-    
-    #readmeContent pre {
-      background: var(--bg-inset);
-      padding: var(--space-md);
-      border-radius: var(--radius-sm);
-      overflow-x: auto;
-      margin-bottom: var(--space-md);
-      border: 2px solid var(--border-color);
-    }
-    
-    #readmeContent pre code {
-      background: none;
-      padding: 0;
-      border: none;
-      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'Courier New', monospace;
-      font-size: 0.875rem;
-      line-height: 1.5;
-    }
-    
-    #readmeContent blockquote {
-      border-left: 4px solid var(--border-color);
-      padding-left: var(--space-md);
-      margin-left: 0;
-      margin-bottom: var(--space-md);
-      opacity: 0.8;
-    }
-    
-    #readmeContent a {
-      color: var(--text-primary);
-      text-decoration: underline;
-    }
-    
-    #readmeContent table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: var(--space-md);
-    }
-    
-    #readmeContent th, #readmeContent td {
-      border: 2px solid var(--border-color);
-      padding: var(--space-sm);
-      text-align: left;
-    }
-    
-    #readmeContent th {
-      background: var(--bg-raised);
-      font-weight: bold;
-    }
-    
-    #readmeContent img {
-      max-width: 100%;
-      height: auto;
-      margin-bottom: var(--space-md);
-    }
-    
-    #readmeContent hr {
-      border: none;
-      border-top: 2px solid var(--border-color);
-      margin: var(--space-lg) 0;
-    }
-    
-    /* Back to Top Button */
-    #backToTop {
-      position: fixed;
-      bottom: var(--space-lg);
-      right: var(--space-lg);
-      width: 48px;
-      height: 48px;
-      background: var(--bg-raised);
-      border: 2px solid var(--border-color);
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      opacity: 0;
-      visibility: hidden;
-      transition: opacity 0.3s, visibility 0.3s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 50;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    }
-    
-    #backToTop.visible {
-      opacity: 1;
-      visibility: visible;
-    }
-    
-    #backToTop:active {
-      transform: translateY(1px);
-    }
-    
-    /* Loading state */
-    .loading {
-      text-align: center;
-      padding: var(--space-xl);
-      color: var(--text-secondary);
-    }
-  </style>
-  
-  <script>
-    // Load SVG icon sprite
-    fetch('../assets/icons/icons.svg')
-      .then(response => response.text())
-      .then(data => {
-        const div = document.createElement('div');
-        div.style.display = 'none';
-        div.innerHTML = data;
-        document.body.insertBefore(div, document.body.firstChild);
-      })
-      .catch(err => console.error('Failed to load icons:', err));
-  </script>
 </head>
-<body data-page="readme">
+<body>
   
-  <!-- Top Bar -->
+  <!-- Topbar -->
   <div class="topbar">
-    <div class="topbar-title">
+    <div class="topbar-title" style="text-align: left;">
       <a href="../index.html" style="color: inherit; text-decoration: none; opacity: 0.6;">Home</a>
       <span style="opacity: 0.4; margin: 0 var(--space-xs);">/</span>
-      Documentation
+      <span>Documentation</span>
     </div>
     <div class="topbar-actions">
-      <button onclick="window.location.href='../index.html'">← Back</button>
+      <!-- Empty for consistency -->
     </div>
   </div>
   
-  <!-- README Content -->
-  <div id="readmeContent">
-    <div class="loading">Loading documentation...</div>
-  </div>
+  <!-- Main Content -->
+  <main class="container">
+    <div id="readmeContent">
+      <p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">Loading documentation...</p>
+    </div>
+  </main>
   
   <script>
+    // Initialize and load README.md
+    window.addEventListener('DOMContentLoaded', async () => {
+      // Initialize database for settings
+      await db.init();
+      
+      // Load README
+      loadReadme();
+    });
+    
     // Load and render README.md
     async function loadReadme() {
       try {
@@ -232,7 +63,6 @@
         
         const markdown = await response.text();
         
-        // Configure marked.js with simple options
         if (typeof marked !== 'undefined') {
           marked.setOptions({
             breaks: true,
@@ -245,49 +75,15 @@
           throw new Error('Marked.js library not loaded');
         }
         
-        // Fix internal anchor links (table of contents)
-        setTimeout(() => {
-          const links = document.querySelectorAll('#readmeContent a[href^="#"]');
-          links.forEach(link => {
-            link.addEventListener('click', (e) => {
-              e.preventDefault();
-              const hash = link.getAttribute('href');
-              const targetId = hash.substring(1);
-              
-              // Find the heading with matching text
-              const headings = document.querySelectorAll('#readmeContent h1, #readmeContent h2, #readmeContent h3, #readmeContent h4');
-              let targetElement = null;
-              
-              headings.forEach(heading => {
-                const headingText = heading.textContent.toLowerCase().trim();
-                const linkText = targetId.toLowerCase().replace(/-/g, ' ').replace(/^[\s-]+/, '');
-                
-                if (headingText.includes(linkText) || linkText.includes(headingText.substring(0, 10))) {
-                  targetElement = heading;
-                }
-              });
-              
-              if (targetElement) {
-                targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                history.pushState(null, null, hash);
-              }
-            });
-          });
-        }, 100);
-        
       } catch (error) {
         console.error('Error loading README:', error);
         document.getElementById('readmeContent').innerHTML = `
-          <div style="text-align: center; padding: var(--space-xl); color: var(--text-secondary);">
-            <p>Failed to load documentation.</p>
-            <p style="font-size: 0.875rem;">${error.message}</p>
-          </div>
+          <p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">
+            Failed to load documentation. ${error.message}
+          </p>
         `;
       }
     }
-    
-    // Initialize
-    window.addEventListener('DOMContentLoaded', loadReadme);
   </script>
 </body>
 </html>

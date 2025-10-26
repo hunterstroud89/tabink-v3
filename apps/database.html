@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="../assets/style.css">
   <script src="../lib/sql-wasm.js"></script>
   <script src="../functions/db.js"></script>
+  <script src="../functions/config.js"></script>
   <script src="../functions/settings.js"></script>
   <style>
     .query-section {
@@ -241,22 +242,28 @@
             <button class="close-btn" onclick="hidePopup()"></button>
           </div>
           <div class="popup-content">
-            <div class="popup-item" data-number="1">
+            <div class="popup-item">
               <div style="flex:1;cursor:pointer" onclick="exportDatabase()">
-                <strong>Export Database</strong>
-                <div class="text-sm muted">Download .db file for backup</div>
+                <strong>⬇ Export Database</strong>
+                <div class="text-sm muted">Download .db file to your device</div>
               </div>
             </div>
-            <div class="popup-item" data-number="2">
+            <div class="popup-item">
               <div style="flex:1;cursor:pointer" onclick="document.getElementById('importFile').click()">
-                <strong>Import Database</strong>
-                <div class="text-sm muted">Restore from .db file</div>
+                <strong>⬆ Import Database</strong>
+                <div class="text-sm muted">Restore from .db file on your device</div>
               </div>
             </div>
-            <div class="popup-item" data-number="3">
+            <div class="popup-item" id="uploadMenuItem" style="display: none;">
+              <div style="flex:1;cursor:pointer" onclick="uploadToServer()">
+                <strong>☁ Upload to Server</strong>
+                <div class="text-sm muted">Backup to remote server</div>
+              </div>
+            </div>
+            <div class="popup-item">
               <div style="flex:1;cursor:pointer" onclick="if(confirm('Clear all data? This cannot be undone!')) clearDatabase()">
-                <strong style="color: #cc0000;">Clear All Data</strong>
-                <div class="text-sm muted">Delete everything</div>
+                <strong style="color: #cc0000;">🗑 Clear All Data</strong>
+                <div class="text-sm muted">Delete everything and start fresh</div>
               </div>
             </div>
           </div>
@@ -264,6 +271,9 @@
         <div class="popup-overlay active" onclick="hidePopup()"></div>
       `;
       document.body.insertAdjacentHTML('beforeend', popupHTML);
+      
+      // Show upload option if server is configured
+      checkServerConfig();
     }
     
     // Show tools menu
@@ -502,6 +512,58 @@
       hidePopup();
       alert('Database cleared! Refresh to reinitialize.');
       location.reload();
+    }
+    
+    // Check if server is configured
+    function checkServerConfig() {
+      if (typeof CONFIG !== 'undefined' && CONFIG.SERVER_URL) {
+        const uploadItem = document.getElementById('uploadMenuItem');
+        if (uploadItem) {
+          uploadItem.style.display = 'block';
+        }
+      }
+    }
+    
+    // Upload to server
+    async function uploadToServer() {
+      if (!CONFIG.SERVER_URL) {
+        alert('Server URL not configured. Please set CONFIG.SERVER_URL in config.js');
+        return;
+      }
+
+      if (!confirm('Upload current database to server?')) {
+        return;
+      }
+
+      try {
+        hidePopup();
+        
+        // Export database as blob
+        const data = db.db.export();
+        const blob = new Blob([data], { type: 'application/x-sqlite3' });
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+        const file = new File([blob], `tabink-backup-${timestamp}.db`, { type: 'application/x-sqlite3' });
+
+        // Upload to server
+        const formData = new FormData();
+        formData.append('database', file);
+
+        const response = await fetch(`${CONFIG.SERVER_URL}/server.php?action=backup`, {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          alert(`✓ Backup uploaded successfully!\n\nFile: ${result.filename}\nSize: ${(result.size / 1024).toFixed(2)} KB`);
+        } else {
+          throw new Error(result.error || 'Upload failed');
+        }
+      } catch (error) {
+        console.error('Upload error:', error);
+        alert('Upload failed: ' + error.message);
+      }
     }
     
     // Tool functions

@@ -32,7 +32,7 @@
       <span onclick="showFeedMenu()" style="cursor: pointer;">Feed ▼</span>
     </div>
     <div class="topbar-actions">
-      <button onclick="refreshFeeds()">↻ Refresh</button>
+      <button id="refreshBtn" onclick="refreshFeeds()">↻ Refresh</button>
       <button onclick="showManageFeedsPopup()">⚙ Feeds</button>
     </div>
   </div>
@@ -47,6 +47,7 @@
 
   <script>
     let currentFilter = 'all';
+    let currentFeedFilter = null; // Track selected feed name for filtering
 
         // Helper function to escape HTML
     function escapeHtml(text) {
@@ -65,8 +66,12 @@
     // Initialize
     window.addEventListener('DOMContentLoaded', async () => {
       await db.init();
-      await addDefaultFeeds();
       await cleanupOldArticles(); // Auto-cleanup on page load
+      
+      // Update refresh button based on online status
+      updateRefreshButtonState();
+      window.addEventListener('online', updateRefreshButtonState);
+      window.addEventListener('offline', updateRefreshButtonState);
       
       // Check if we should open a specific article
       const articleToOpen = localStorage.getItem('feed:openArticle');
@@ -80,30 +85,50 @@
       }
     });
 
+    // Update refresh button state based on online status
+    function updateRefreshButtonState() {
+      const refreshBtn = document.getElementById('refreshBtn');
+      if (!navigator.onLine) {
+        refreshBtn.disabled = true;
+        refreshBtn.style.opacity = '0.5';
+        refreshBtn.style.cursor = 'not-allowed';
+        refreshBtn.title = 'No internet connection';
+      } else {
+        refreshBtn.disabled = false;
+        refreshBtn.style.opacity = '1';
+        refreshBtn.style.cursor = 'pointer';
+        refreshBtn.title = 'Refresh feeds from server';
+      }
+    }
+
     // Auto-cleanup old articles
     async function cleanupOldArticles() {
-      // Delete articles older than 30 days (except saved ones)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      // Delete articles older than configured days (except saved ones)
+      const maxAgeDays = CONFIG.MAX_ARTICLE_AGE_DAYS || 30;
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - maxAgeDays);
       
       db.run(`
         DELETE FROM feed_articles 
         WHERE saved = 0 
-        AND datetime(pubDate) < datetime('${thirtyDaysAgo.toISOString()}')
+        AND datetime(pubDate) < datetime('${cutoffDate.toISOString()}')
       `);
       
-      // Keep only 100 most recent unsaved articles
-      const unsavedToDelete = db.all(`
-        SELECT id FROM feed_articles 
-        WHERE saved = 0
-        ORDER BY pubDate DESC
-      `);
+      // Enforce article limit (from config)
+      const maxArticles = CONFIG.MAX_ARTICLES || 500;
+      const unsavedCount = db.all('SELECT COUNT(*) as count FROM feed_articles WHERE saved = 0')[0].count;
       
-      if (unsavedToDelete.length > 100) {
-        const idsToDelete = unsavedToDelete.slice(100).map(row => row.id);
-        for (const id of idsToDelete) {
-          db.run('DELETE FROM feed_articles WHERE id = ?', [id]);
-        }
+      if (unsavedCount > maxArticles) {
+        const deleteCount = unsavedCount - maxArticles;
+        db.run(`
+          DELETE FROM feed_articles 
+          WHERE id IN (
+            SELECT id FROM feed_articles 
+            WHERE saved = 0 
+            ORDER BY datetime(pubDate) ASC 
+            LIMIT ?
+          )
+        `, [deleteCount]);
       }
       
       // Clean up orphaned images
@@ -116,328 +141,288 @@
       console.log('Auto-cleanup complete');
     }
 
-    // Add default feeds if none exist
-    async function addDefaultFeeds() {
-      const feeds = await db.getFeeds();
-      if (feeds.length === 0) {
-        // Tech & News
-        await db.addFeed('Hacker News', 'https://hnrss.org/frontpage');
-        await db.addFeed('CSS-Tricks', 'https://css-tricks.com/feed/');
-        await db.addFeed('MIT Technology Review', 'https://www.technologyreview.com/feed/');
+    // Sync feeds from server
+    async function syncFromServer(silent = false) {
+      try {
+        // Fetch feeds from server's localStorage
+        // We'll create a server endpoint to export feeds
+        const serverUrl = CONFIG.SERVER_URL || 'https://www.hunter-stroud.com/tabink-server';
         
-        // Design & Creativity
-        await db.addFeed('Colossal', 'https://www.thisiscolossal.com/feed/');
-        await db.addFeed('Behance Featured', 'https://www.behance.net/feeds/projects');
+        // Try to fetch from a server endpoint (we'll create this)
+        let response;
+        try {
+          response = await fetch(`${serverUrl}/server.php?action=feeds`);
+        } catch (err) {
+          // Silently fail if server not available
+          if (!silent) {
+            console.log('Server feeds not available, using local feeds');
+          }
+          return;
+        }
         
-        // Lifestyle & Productivity
-        await db.addFeed('Brain Pickings', 'https://www.themarginalian.org/feed/');
-        await db.addFeed('Zen Habits', 'https://zenhabits.net/feed/');
+        if (!response.ok) {
+          if (!silent) {
+            console.log('Server returned: ' + response.status);
+          }
+          return;
+        }
         
-        // Open Source & Tech
-        await db.addFeed('GitHub Blog', 'https://github.blog/feed/');
-        await db.addFeed('Mozilla Blog', 'https://blog.mozilla.org/feed/');
+        const feeds = await response.json();
+        
+        if (!Array.isArray(feeds) || feeds.length === 0) {
+          if (!silent) {
+            console.log('No feeds found on server');
+          }
+          return;
+        }
+        
+        // Get current feeds
+        const currentFeeds = await db.getFeeds();
+        
+        // Check if feeds are different
+        const currentUrls = new Set(currentFeeds.map(f => f.url));
+        const serverUrls = new Set(feeds.map(f => f.url));
+        const feedsChanged = currentFeeds.length !== feeds.length || 
+                            [...currentUrls].some(url => !serverUrls.has(url)) ||
+                            [...serverUrls].some(url => !currentUrls.has(url));
+        
+        if (feedsChanged) {
+          // Clear current feeds (but keep articles!)
+          for (const feed of currentFeeds) {
+            await db.deleteFeed(feed.url);
+          }
+          
+          // Import server feeds
+          for (const feed of feeds) {
+            if (feed.name && feed.url) {
+              await db.addFeed(feed.name, feed.url);
+            }
+          }
+          
+          if (!silent) {
+            console.log(`✓ Synced ${feeds.length} feeds from server`);
+          }
+        }
+        
+      } catch (error) {
+        if (!silent) {
+          console.error('Sync error:', error);
+        }
       }
     }
 
-    // Fetch and parse RSS feed
-    async function fetchFeed(feedUrl, feedName) {
+    // Download articles from server (already fetched server-side)
+    // NEW: Incremental sync - only download articles published after our last sync
+    async function downloadArticlesFromServer() {
       try {
-        // Try multiple methods to fetch RSS
-        const methods = [
-          // Try direct fetch first (works for many feeds)
-          { name: 'Direct', url: feedUrl },
-          // Fallback to proxies
-          { name: 'AllOrigins', url: 'https://api.allorigins.win/raw?url=' + encodeURIComponent(feedUrl) },
-          { name: 'ThingProxy', url: 'https://thingproxy.freeboard.io/fetch/' + encodeURIComponent(feedUrl) },
-          { name: 'RSS2JSON', url: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(feedUrl) }
-        ];
+        const serverUrl = CONFIG.SERVER_URL || 'https://www.hunter-stroud.com/tabink-server';
         
-        let response, data;
-        let lastError;
+        // Get the most recent article date we have locally
+        const mostRecentArticle = db.all(`
+          SELECT pubDate FROM feed_articles 
+          WHERE saved = 0
+          ORDER BY datetime(pubDate) DESC 
+          LIMIT 1
+        `);
         
-        for (const method of methods) {
+        let url = `${serverUrl}/server.php?action=articles`;
+        
+        // If we have articles, only fetch newer ones
+        if (mostRecentArticle && mostRecentArticle.length > 0) {
+          const lastSync = mostRecentArticle[0].pubDate;
+          url += `&since=${encodeURIComponent(lastSync)}`;
+          console.log(`📥 Fetching articles newer than ${lastSync}`);
+        } else {
+          console.log(`📥 First sync - fetching all articles`);
+        }
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`Server returned ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.articles || data.articles.length === 0) {
+          console.log('No new articles on server.');
+          return {downloaded: 0, saved: 0, new: 0};
+        }
+        
+        let saved = 0;
+        let newArticles = 0;
+        
+        // Save each article to local database
+        for (const article of data.articles) {
+          // Generate stable article ID from guid/link
+          const guid = article.guid || article.link || (article.title + article.feedUrl);
+          let hash = 0;
+          for (let i = 0; i < guid.length; i++) {
+            const char = guid.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash;
+          }
+          const articleId = 'article_' + Math.abs(hash).toString(36);
+          
+          // Check if article already exists
+          const existingArticle = db.all('SELECT id FROM feed_articles WHERE id = ?', [articleId]);
+          if (existingArticle && existingArticle.length > 0) {
+            continue; // Skip duplicates
+          }
+          
+          // Extract image URLs from server's {url, local} format
+          let imageUrls = [];
+          if (article.images && Array.isArray(article.images)) {
+            imageUrls = article.images.map(img => {
+              // Server sends {url: "...", local: "..."} objects
+              if (typeof img === 'object' && img.local) {
+                // Use server's local cached image URL
+                return `${serverUrl}/${img.local}`;
+              } else if (typeof img === 'object' && img.url) {
+                // Fallback to original URL
+                return img.url;
+              } else if (typeof img === 'string') {
+                // Old format: just URL string
+                return img;
+              }
+              return null;
+            }).filter(url => url !== null);
+          }
+          
+          const articleData = {
+            id: articleId,
+            title: article.title || 'Untitled',
+            link: article.link || '',
+            description: article.description || '',
+            content: article.content || article.description || '',
+            preview: (article.content || article.description || '').substring(0, 200),
+            pubDate: article.pubDate ? new Date(article.pubDate).toISOString() : new Date().toISOString(),
+            guid: article.guid || article.link,
+            feedUrl: article.feedUrl || '',
+            feedName: article.feedName || 'Unknown',
+            savedAt: new Date().toISOString(),
+            read: false,
+            saved: false,
+            images: imageUrls
+          };
+          
           try {
-            response = await fetch(method.url, {
-              signal: AbortSignal.timeout(10000) // 10 second timeout
-            });
-            
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
-            
-            // Handle RSS2JSON format differently
-            if (method.name === 'RSS2JSON') {
-              const json = await response.json();
-              if (json.status !== 'ok') throw new Error('RSS2JSON error');
-              data = convertRSS2JSONToXML(json);
-            } else {
-              data = await response.text();
-            }
-            break;
+            await db.saveArticle(articleData);
+            saved++;
+            newArticles++;
           } catch (err) {
-            lastError = err;
-            continue;
+            console.warn('Failed to save article:', err.message);
           }
         }
         
-        if (!data) {
-          throw lastError || new Error('All methods failed');
-        }
+        console.log(`✓ Downloaded ${data.articles.length} articles from server, saved ${saved} new articles`);
         
-        const parser = new DOMParser();
-        const xml = parser.parseFromString(data, 'text/xml');
+        // ENFORCE ARTICLE LIMIT (keep only 500 most recent unsaved articles)
+        await enforceArticleLimit(500);
         
-        const items = xml.querySelectorAll('item');
-        const parsedArticles = [];
+        return {
+          downloaded: data.articles.length,
+          saved: saved,
+          new: newArticles,
+          lastRefresh: data.lastRefresh
+        };
         
-        items.forEach((item, index) => {
-          if (index < 5) { // Limit to 5 items per feed to save space
-            const title = item.querySelector('title')?.textContent || 'Untitled';
-            const link = item.querySelector('link')?.textContent || '';
-            
-            // Try to get full content from multiple sources
-            let content = item.querySelector('content\\:encoded, encoded')?.textContent || 
-                         item.querySelector('description')?.textContent || 
-                         item.querySelector('summary')?.textContent || '';
-            
-            console.log(`Article "${title}": content length = ${content.length} chars`);
-            
-            // Extract images from multiple sources
-            const imageSet = new Set();
-            
-            // 1. Check for media:content tags (YouTube, podcasts, etc.)
-            const mediaContent = item.querySelectorAll('media\\:content, content');
-            mediaContent.forEach(media => {
-              const url = media.getAttribute('url');
-              const medium = media.getAttribute('medium');
-              if (url && (medium === 'image' || url.match(/\.(jpg|jpeg|png|gif|webp)/i))) {
-                imageSet.add(url);
-                console.log(`Found media:content image: ${url}`);
-              }
-            });
-            
-            // 2. Check for media:thumbnail tags
-            const mediaThumbnail = item.querySelectorAll('media\\:thumbnail, thumbnail');
-            mediaThumbnail.forEach(thumb => {
-              const url = thumb.getAttribute('url');
-              if (url) {
-                imageSet.add(url);
-                console.log(`Found media:thumbnail: ${url}`);
-              }
-            });
-            
-            // 3. Check for enclosure tags (common in podcasts and some blogs)
-            const enclosures = item.querySelectorAll('enclosure');
-            enclosures.forEach(enc => {
-              const url = enc.getAttribute('url');
-              const type = enc.getAttribute('type');
-              if (url && type && type.startsWith('image/')) {
-                imageSet.add(url);
-                console.log(`Found enclosure image: ${url}`);
-              }
-            });
-            
-            // 4. Extract images from HTML content
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = content;
-            const contentImages = Array.from(tempDiv.querySelectorAll('img'));
-            contentImages.forEach(img => {
-              const src = img.src || img.getAttribute('data-src') || img.getAttribute('data-lazy-src');
-              if (src && src.startsWith('http')) {
-                imageSet.add(src);
-                console.log(`Found content image: ${src}`);
-              }
-            });
-            
-            // Convert Set to Array and limit to 3 images
-            const images = Array.from(imageSet).slice(0, 3);
-            console.log(`Total images for "${title}": ${images.length}`);
-            
-            // Clean HTML
-            const cleanContent = content
-              .replace(/<script[^>]*>.*?<\/script>/gi, '')
-              .replace(/<style[^>]*>.*?<\/style>/gi, '')
-              .replace(/<img[^>]*>/gi, '')
-              .replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, '$2 ($1)')
-              .replace(/<br\s*\/?>/gi, '\n')
-              .replace(/<\/p>/gi, '\n\n')
-              .replace(/<[^>]*>/g, '')
-              .replace(/\n{3,}/g, '\n\n')
-              .trim()
-              .substring(0, 5000); // Limit content to 5000 chars to save space
-            
-            const preview = cleanContent.substring(0, 200);
-            const pubDate = item.querySelector('pubDate')?.textContent || '';
-            
-            // Use guid if available, otherwise use link, otherwise fall back to hash of title+link
-            const guid = item.querySelector('guid')?.textContent || link || (title + feedUrl);
-            
-            // Create stable hash - simple hash function for consistent IDs
-            let hash = 0;
-            for (let i = 0; i < guid.length; i++) {
-              const char = guid.charCodeAt(i);
-              hash = ((hash << 5) - hash) + char;
-              hash = hash & hash; // Convert to 32bit integer
-            }
-            const articleId = 'article_' + Math.abs(hash).toString(36);
-            
-            console.log(`Article "${title}": ID = ${articleId}, GUID = ${guid.substring(0, 50)}`);
-            
-            parsedArticles.push({
-              id: articleId,
-              title,
-              link,
-              content: cleanContent,
-              preview,
-              pubDate: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
-              feedUrl,
-              feedName,
-              savedAt: new Date().toISOString(),
-              read: false,
-              saved: false,
-              images
-            });
-          }
-        });
-        
-        return parsedArticles;
       } catch (error) {
-        console.error('Error fetching feed:', feedUrl, error);
-        return [];
+        console.error('Download from server failed:', error);
+        return {downloaded: 0, saved: 0, new: 0};
       }
     }
     
-    // Convert RSS2JSON format to XML string for parsing
-    function convertRSS2JSONToXML(json) {
-      let xml = '<?xml version="1.0"?><rss><channel>';
-      json.items.forEach(item => {
-        xml += '<item>';
-        xml += `<title><![CDATA[${item.title || ''}]]></title>`;
-        xml += `<link>${item.link || ''}</link>`;
-        xml += `<guid>${item.guid || item.link || ''}</guid>`;
-        xml += `<pubDate>${item.pubDate || ''}</pubDate>`;
-        xml += `<description><![CDATA[${item.description || ''}]]></description>`;
-        if (item.content) xml += `<content:encoded><![CDATA[${item.content}]]></content:encoded>`;
-        if (item.enclosure?.link) xml += `<enclosure url="${item.enclosure.link}"/>`;
-        xml += '</item>';
-      });
-      xml += '</channel></rss>';
-      return xml;
+    // NEW: Enforce article limit - delete oldest unsaved articles if count exceeds limit
+    async function enforceArticleLimit(maxArticles) {
+      maxArticles = maxArticles || CONFIG.MAX_ARTICLES || 500;
+      
+      const unsavedCount = db.all('SELECT COUNT(*) as count FROM feed_articles WHERE saved = 0')[0].count;
+      
+      if (unsavedCount > maxArticles) {
+        const deleteCount = unsavedCount - maxArticles;
+        console.log(`⚠️ Article limit reached (${unsavedCount}/${maxArticles}). Deleting ${deleteCount} oldest articles...`);
+        
+        // Delete oldest unsaved articles
+        db.run(`
+          DELETE FROM feed_articles 
+          WHERE id IN (
+            SELECT id FROM feed_articles 
+            WHERE saved = 0 
+            ORDER BY datetime(pubDate) ASC 
+            LIMIT ?
+          )
+        `, [deleteCount]);
+        
+        // Clean up orphaned images
+        db.run(`
+          DELETE FROM feed_images 
+          WHERE articleId NOT IN (SELECT id FROM feed_articles)
+        `);
+        
+        db.save();
+        console.log(`✓ Deleted ${deleteCount} old articles. Now at ${maxArticles} articles.`);
+      }
     }
 
     // Refresh all feeds
     async function refreshFeeds() {
-      const feeds = await db.getFeeds();
-      
-      if (feeds.length === 0) {
-        alert('No feeds added yet. Click "⚙ Feeds" to add feeds.');
+      // Check if online
+      if (!navigator.onLine) {
+        alert('📡 No internet connection\n\nYou need to be online to refresh feeds.');
         return;
       }
-
+      
+      console.log('🔄 Starting refresh - checking for new articles');
+      
       const container = document.getElementById('articlesContainer');
       container.innerHTML = 
-        '<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">Cleaning up old articles...</p>';
-
-      // Auto-cleanup: Delete articles older than 30 days (except saved ones)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      db.run(`
-        DELETE FROM feed_articles 
-        WHERE saved = 0 
-        AND datetime(pubDate) < datetime('${thirtyDaysAgo.toISOString()}')
-      `);
+        '<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">🔄 Checking for new articles...</p>';
       
-      // Keep only 100 most recent unsaved articles
-      const unsavedToDelete = db.all(`
-        SELECT id FROM feed_articles 
-        WHERE saved = 0
-        ORDER BY pubDate DESC
-      `);
-      
-      if (unsavedToDelete.length > 100) {
-        const idsToDelete = unsavedToDelete.slice(100).map(row => row.id);
-        for (const id of idsToDelete) {
-          db.run('DELETE FROM feed_articles WHERE id = ?', [id]);
+      try {
+        // Sync feeds list from server
+        await syncFromServer(true);
+        
+        const feeds = await db.getFeeds();
+        
+        if (feeds.length === 0) {
+          alert('No feeds available. Please add feeds on the server first.\n\nGo to: https://www.hunter-stroud.com/tabink-server/');
+          await renderArticles();
+          return;
         }
-      }
-      
-      db.save();
-      console.log('Cleanup complete');
 
-      container.innerHTML = 
-        '<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">Fetching feeds... This may take a moment.</p>';
-
-      let successCount = 0;
-      let totalNewArticles = 0;
-      const failedFeeds = [];
-      
-      for (let i = 0; i < feeds.length; i++) {
-        const feed = feeds[i];
-        container.innerHTML = 
-          `<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">Loading ${feed.name}... (${i + 1}/${feeds.length})</p>`;
+        // Download new articles from server (existing ones are skipped)
+        const result = await downloadArticlesFromServer();
         
-        const feedArticles = await fetchFeed(feed.url, feed.name);
-        
-        if (feedArticles.length > 0) {
-          successCount++;
+        if (result.saved > 0) {
+          db.save();
+          await renderArticles();
           
-          // Save articles without calling db.save() each time
-          for (const article of feedArticles) {
-            db.run(`
-              INSERT OR REPLACE INTO feed_articles 
-              (id, title, link, content, preview, pubDate, feedUrl, feedName, savedAt, read, saved)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `, [
-              article.id,
-              article.title,
-              article.link || '',
-              article.content || '',
-              article.preview || '',
-              article.pubDate,
-              article.feedUrl || '',
-              article.feedName || '',
-              article.savedAt,
-              article.read ? 1 : 0,
-              article.saved ? 1 : 0
-            ]);
-            
-            // Save images
-            if (article.images && article.images.length > 0) {
-              db.run('DELETE FROM feed_images WHERE articleId = ?', [article.id]);
-              for (const imageUrl of article.images) {
-                db.run('INSERT INTO feed_images (articleId, imageUrl) VALUES (?, ?)', [article.id, imageUrl]);
-              }
-            }
-            
-            totalNewArticles++;
-          }
+          alert(`✓ Downloaded ${result.new} new articles!\n\nLast server refresh: ${result.lastRefresh ? new Date(result.lastRefresh).toLocaleString() : 'Unknown'}`);
         } else {
-          failedFeeds.push(feed.name);
+          await renderArticles();
+          alert('No new articles found.\n\nEverything is up to date!');
         }
-      }
-      
-      // Save database ONCE at the end instead of after each article
-      db.save();
-      console.log('Database saved to localStorage');
-
-      await renderArticles();
-      
-      let message = `Refreshed ${successCount}/${feeds.length} feeds\nCached ${totalNewArticles} articles for offline reading.`;
-      if (failedFeeds.length > 0) {
-        message += `\n\nFailed to load:\n${failedFeeds.join(', ')}`;
-      }
-      
-      if (successCount === 0) {
-        container.innerHTML = 
-          '<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">Failed to load feeds. Check your internet connection and try again.</p>';
-      } else {
-        alert(message);
+      } catch (error) {
+        console.error('Refresh error:', error);
+        alert('⚠️ Refresh failed\n\n' + error.message);
+        await renderArticles();
       }
     }
 
+    // Clear database
     // Render articles
     async function renderArticles() {
       const articles = await db.getArticles();
+      console.log('Total articles from DB:', articles.length);
+      if (articles.length > 0) {
+        console.log('First 5 articles:', articles.slice(0, 5).map(a => ({
+          title: a.title.substring(0, 40),
+          pubDate: a.pubDate,
+          feedName: a.feedName
+        })));
+      }
+      
       const container = document.getElementById('articlesContainer');
       
       if (articles.length === 0) {
@@ -445,6 +430,13 @@
           '<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">No articles yet. Click "⚙ Feeds" to add RSS feeds.</p>';
         return;
       }
+
+      // Sort articles by date (newest first) - do this in JavaScript to be consistent across browsers
+      articles.sort((a, b) => {
+        const dateA = new Date(a.pubDate).getTime();
+        const dateB = new Date(b.pubDate).getTime();
+        return dateB - dateA; // Descending order (newest first)
+      });
 
       // Filter articles
       let filteredArticles = articles;
@@ -456,6 +448,11 @@
         filteredArticles = articles.filter(a => a.saved);
       }
 
+      // Apply feed filter if set
+      if (currentFeedFilter) {
+        filteredArticles = filteredArticles.filter(a => a.feedName === currentFeedFilter);
+      }
+
       if (filteredArticles.length === 0) {
         container.innerHTML = 
           '<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">No articles match this filter.</p>';
@@ -464,8 +461,20 @@
 
       let html = '';
       filteredArticles.forEach((article) => {
-        const date = new Date(article.pubDate);
-        const timeAgo = getTimeAgo(date);
+        // Parse date more carefully
+        const date = article.pubDate ? new Date(article.pubDate) : new Date();
+        
+        // Debug: log the first article's date info
+        if (filteredArticles.indexOf(article) === 0) {
+          console.log('Debug first article:', {
+            pubDate: article.pubDate,
+            parsedDate: date,
+            isValid: !isNaN(date.getTime()),
+            timestamp: date.getTime()
+          });
+        }
+        
+        const timeAgo = (!isNaN(date.getTime())) ? getTimeAgo(date) : 'Unknown date';
         const readStyle = article.read ? 'opacity: 0.6;' : '';
         const savedBadge = article.saved ? '<span style="color: gold; font-size: 20px; margin-left: 4px;">★</span>' : '';
         const coverImage = article.images && article.images.length > 0 ? article.images[0] : null;
@@ -626,45 +635,44 @@
     // Show manage feeds popup
     async function showManageFeedsPopup() {
       const feeds = await db.getFeeds();
-      console.log('Feeds from database:', feeds);
-      console.log('Number of feeds:', feeds.length);
+      const serverUrl = CONFIG.SERVER_URL || 'https://www.hunter-stroud.com/tabink-server';
       
       let popupHTML = `
         <div class="popup active">
           <div class="popup-header">
-            <h3 class="popup-title">Manage Feeds</h3>
+            <h3 class="popup-title">Feeds</h3>
             <button class="close-btn" onclick="hidePopup()"></button>
           </div>
-          <div class="popup-content">
-            <div style="display: flex; gap: var(--space-xs); margin-bottom: var(--space-md);">
-              <input 
-                type="text" 
-                id="newFeedName" 
-                placeholder="Feed name..."
-                style="flex: 1; padding: var(--space-sm); border: 2px solid var(--border-color); border-radius: var(--radius-sm);"
-              />
-              <input 
-                type="url" 
-                id="newFeedUrl" 
-                placeholder="RSS URL..."
-                style="flex: 2; padding: var(--space-sm); border: 2px solid var(--border-color); border-radius: var(--radius-sm);"
-              />
-              <button onclick="addFeed()" style="padding: var(--space-sm) var(--space-md); background: var(--bg-raised); border: 2px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer;">Add</button>
+          <div class="popup-content" style="max-height: 70vh; overflow-y: auto;">
+            <div style="background: var(--bg-inset); padding: var(--space-sm); border-radius: var(--radius-sm); margin-bottom: var(--space-md); border: 1px solid var(--border-color);">
+              <p class="text-sm muted">Feeds are managed at <a href="${serverUrl}" target="_blank" style="color: var(--accent); text-decoration: underline;">${serverUrl.replace('https://', '')}</a></p>
             </div>
-            <p class="text-sm muted" style="margin-bottom: var(--space-md);">Click "↻ Refresh" in the main feed view to download articles from your feeds when online.</p>
+            
+            <div class="popup-item${!currentFeedFilter ? ' active' : ''}" style="cursor: pointer;" onclick="filterByFeed(null)">
+              <div style="flex: 1;">
+                <strong>All Feeds</strong>
+                <div class="text-sm muted">Show articles from all sources</div>
+              </div>
+            </div>
       `;
 
       if (feeds.length === 0) {
-        popupHTML += '<p class="muted text-sm">No feeds yet. Add one above.</p>';
+        popupHTML += `
+          <div class="empty-state">
+            <div class="empty-state-icon">📭</div>
+            <p>No feeds loaded yet.</p>
+            <p class="text-sm muted">Add feeds on the server, then click "Refresh"</p>
+          </div>
+        `;
       } else {
-        feeds.forEach((feed, index) => {
+        feeds.forEach((feed) => {
+          const isActive = currentFeedFilter === feed.name;
           popupHTML += `
-            <div class="popup-item" data-number="${index + 1}">
+            <div class="popup-item${isActive ? ' active' : ''}" style="cursor: pointer;" onclick="filterByFeed('${escapeHtml(feed.name).replace(/'/g, "\\'")}')">
               <div style="flex: 1;">
                 <strong>${escapeHtml(feed.name)}</strong>
-                <div class="text-sm muted">${escapeHtml(feed.url)}</div>
+                <div class="text-sm muted" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(feed.url)}</div>
               </div>
-              <button onclick="deleteFeed('${feed.url}')" style="padding: 2px 8px; font-size: 1.2em; line-height: 1; border: 2px solid var(--border-color); background: var(--bg-inset); border-radius: 3px; cursor: pointer;">×</button>
             </div>
           `;
         });
@@ -673,7 +681,7 @@
       popupHTML += `
           </div>
           <div class="popup-footer">
-            <span>${feeds.length} feed${feeds.length !== 1 ? 's' : ''}</span>
+            <span>${currentFeedFilter ? `Filtered: ${currentFeedFilter}` : `${feeds.length} feed${feeds.length !== 1 ? 's' : ''} in database`}</span>
           </div>
         </div>
         <div class="popup-overlay active" onclick="hidePopup()"></div>
@@ -682,32 +690,11 @@
       document.body.insertAdjacentHTML('beforeend', popupHTML);
     }
 
-    // Add feed
-    async function addFeed() {
-      const nameInput = document.getElementById('newFeedName');
-      const urlInput = document.getElementById('newFeedUrl');
-      const name = nameInput.value.trim();
-      const url = urlInput.value.trim();
-      
-      if (!name || !url) {
-        alert('Please enter both name and URL');
-        return;
-      }
-
-      await db.addFeed(name, url);
-      nameInput.value = '';
-      urlInput.value = '';
+    // Filter articles by feed
+    async function filterByFeed(feedName) {
+      currentFeedFilter = feedName;
       hidePopup();
-      showManageFeedsPopup();
-    }
-
-    // Delete feed
-    async function deleteFeed(url) {
-      if (confirm('Remove this feed?')) {
-        await db.deleteFeed(url);
-        hidePopup();
-        showManageFeedsPopup();
-      }
+      await renderArticles();
     }
 
     // Hide popup
@@ -720,6 +707,10 @@
 
     // Get time ago
     function getTimeAgo(date) {
+      if (!date || isNaN(date.getTime())) {
+        return 'Unknown date';
+      }
+      
       const now = new Date();
       const diffMs = now - date;
       const diffSecs = Math.floor(diffMs / 1000);
@@ -727,6 +718,20 @@
       const diffHours = Math.floor(diffMins / 60);
       const diffDays = Math.floor(diffHours / 24);
       
+      // Debug logging for first call
+      if (!window.timeAgoDebugShown) {
+        console.log('getTimeAgo debug:', {
+          now: now,
+          articleDate: date,
+          diffMs: diffMs,
+          diffSecs: diffSecs,
+          diffMins: diffMins,
+          diffHours: diffHours
+        });
+        window.timeAgoDebugShown = true;
+      }
+      
+      if (diffSecs < 0) return 'Just now';
       if (diffSecs < 60) return `${diffSecs}s ago`;
       if (diffMins < 60) return `${diffMins}m ago`;
       if (diffHours < 24) return `${diffHours}h ago`;
