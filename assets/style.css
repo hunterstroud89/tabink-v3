@@ -156,6 +156,7 @@ template { display: none; }
 
 [data-font="mono"] body {
   font-family: var(--font-mono);
+  font-weight: bold;
 }
 
 /* No caps mode */

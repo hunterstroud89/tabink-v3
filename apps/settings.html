@@ -91,12 +91,6 @@
       </button>
     </div>
 
-    <div class="card">
-      <button class="btn btn-block" onclick="clearStorage()">
-        Clear All Data
-      </button>
-    </div>
-
     <div class="text-center text-dim font-sm" style="margin-top: var(--space-xl); border: none; background: transparent;">
       Tabink v3.0<br>
       SQLite • Offline-First • No Server Required
@@ -321,16 +315,6 @@
       if (/Firefox/i.test(ua)) return 'Firefox';
       if (/Edge/i.test(ua)) return 'Edge';
       return 'Unknown Browser';
-    }
-
-    function clearStorage() {
-      if (confirm('WARNING: This will delete ALL data including notes, tasks, and feeds. Continue?')) {
-        if (confirm('Are you absolutely sure? This cannot be undone!')) {
-          localStorage.removeItem('tabink_db');
-          alert('All data cleared. Reloading...');
-          location.reload();
-        }
-      }
     }
 
     // Show storage details

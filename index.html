@@ -22,7 +22,7 @@
   <script src="apps/widgets/files-widget.js"></script>
   <script src="apps/widgets/tasks-widget.js"></script>
   <script src="apps/widgets/feed-widget.js"></script>
-  <script src="apps/widgets/timer-widget.js"></script>
+  <script src="apps/widgets/sidebar-widget.js"></script>
   
   <script>
     // Load SVG icon sprite
@@ -44,7 +44,7 @@
     <div class="topbar-title">/tabink</div>
     <div class="topbar-actions">
       <button onclick="openApp('settings')">Settings</button>
-      <button id="timerButton" onclick="TimerWidget.toggle()">
+      <button id="timerButton" onclick="SidebarWidget.toggle()" style="font-weight: bold;">
         <svg class="icon" style="vertical-align: middle;">
           <use href="#icon-clock"></use>
         </svg>
@@ -124,51 +124,6 @@
       </div>
     </div>
   </section>
-  
-  <!-- App Grid -->
-  <div class="grid grid-5">
-    <div class="card" onclick="openApp('files')" style="cursor: pointer; text-align: center;">
-      <svg class="icon icon-xl" style="display: block; margin: 0 auto var(--space-sm);">
-        <use href="#icon-folder"></use>
-      </svg>
-      <div class="bold">Files</div>
-    </div>
-    
-    <div class="card" onclick="openApp('tasks')" style="cursor: pointer; text-align: center;">
-      <svg class="icon icon-xl" style="display: block; margin: 0 auto var(--space-sm);">
-        <use href="#icon-checkbox"></use>
-      </svg>
-      <div class="bold">Tasks</div>
-    </div>
-    
-    <div class="card" onclick="openApp('timer')" style="cursor: pointer; text-align: center;">
-      <svg class="icon icon-xl" style="display: block; margin: 0 auto var(--space-sm);">
-        <use href="#icon-clock"></use>
-      </svg>
-      <div class="bold">Timer</div>
-    </div>
-    
-    <div class="card" onclick="openApp('feed')" style="cursor: pointer; text-align: center;">
-      <svg class="icon icon-xl" style="display: block; margin: 0 auto var(--space-sm);">
-        <use href="#icon-file"></use>
-      </svg>
-      <div class="bold">Feed</div>
-    </div>
-    
-    <div class="card" onclick="openApp('readme')" style="cursor: pointer; text-align: center;">
-      <svg class="icon icon-xl" style="display: block; margin: 0 auto var(--space-sm);">
-        <use href="#icon-file-text"></use>
-      </svg>
-      <div class="bold">Docs</div>
-    </div>
-    
-    <div class="card" onclick="openApp('settings')" style="cursor: pointer; text-align: center;">
-      <svg class="icon icon-xl" style="display: block; margin: 0 auto var(--space-sm);">
-        <use href="#icon-settings"></use>
-      </svg>
-      <div class="bold">Settings</div>
-    </div>
-  </div>
 
   
   <script>
