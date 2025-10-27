@@ -168,34 +168,41 @@ class TabinkDB {
 
   // Save database to IndexedDB instead of localStorage
   save() {
-    const data = this.db.export();
-    const request = indexedDB.open('tabink', 1);
-    
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains('database')) {
-        db.createObjectStore('database');
-      }
-    };
-    
-    request.onsuccess = (event) => {
-      const db = event.target.result;
-      const transaction = db.transaction(['database'], 'readwrite');
-      const store = transaction.objectStore('database');
-      store.put(data, 'sqliteDb');
+    return new Promise((resolve, reject) => {
+      const data = this.db.export();
+      const request = indexedDB.open('tabink', 1);
       
-      transaction.oncomplete = () => {
-        db.close();
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result;
+        if (!db.objectStoreNames.contains('database')) {
+          db.createObjectStore('database');
+        }
       };
       
-      transaction.onerror = (err) => {
-        console.error('Error saving to IndexedDB:', err);
+      request.onsuccess = (event) => {
+        const db = event.target.result;
+        const transaction = db.transaction(['database'], 'readwrite');
+        const store = transaction.objectStore('database');
+        store.put(data, 'sqliteDb');
+        
+        transaction.oncomplete = () => {
+          db.close();
+          console.log('Database saved to IndexedDB successfully');
+          resolve();
+        };
+        
+        transaction.onerror = (err) => {
+          console.error('Error saving to IndexedDB:', err);
+          db.close();
+          reject(err);
+        };
       };
-    };
-    
-    request.onerror = (err) => {
-      console.error('Error opening IndexedDB:', err);
-    };
+      
+      request.onerror = (err) => {
+        console.error('Error opening IndexedDB:', err);
+        reject(err);
+      };
+    });
   }
 
   // Execute SQL query

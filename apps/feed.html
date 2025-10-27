@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Feed</title>
   <link rel="stylesheet" href="../assets/style.css" />
+  <script src="../cordova.js"></script>
   <script src="../lib/sql-wasm.js"></script>
   <script src="../functions/db.js"></script>
   <script src="../functions/config.js"></script>
@@ -44,6 +45,13 @@
       </p>
     </div>
   </main>
+
+  <!-- Loading Notification -->
+  <div class="notification-overlay" id="loadingOverlay"></div>
+  <div class="notification" id="loadingNotification">
+    <div class="notification-title">🔄 Refreshing Feeds</div>
+    <div class="notification-message">This may take a minute on slower devices...</div>
+  </div>
 
   <script>
     let currentFilter = 'all';
@@ -218,21 +226,26 @@
         const serverUrl = CONFIG.SERVER_URL || 'https://www.hunter-stroud.com/tabink-server';
         
         // Get the most recent article date we have locally
-        const mostRecentArticle = db.all(`
-          SELECT pubDate FROM feed_articles 
-          WHERE saved = 0
-          ORDER BY datetime(pubDate) DESC 
-          LIMIT 1
-        `);
-        
         let url = `${serverUrl}/server.php?action=articles`;
         
-        // If we have articles, only fetch newer ones
-        if (mostRecentArticle && mostRecentArticle.length > 0) {
-          const lastSync = mostRecentArticle[0].pubDate;
-          url += `&since=${encodeURIComponent(lastSync)}`;
-          console.log(`📥 Fetching articles newer than ${lastSync}`);
-        } else {
+        try {
+          const mostRecentArticle = db.all(`
+            SELECT pubDate FROM feed_articles 
+            WHERE saved = 0
+            ORDER BY pubDate DESC 
+            LIMIT 1
+          `);
+          
+          // If we have articles, only fetch newer ones
+          if (mostRecentArticle && mostRecentArticle.length > 0 && mostRecentArticle[0].pubDate) {
+            const lastSync = mostRecentArticle[0].pubDate;
+            url += `&since=${encodeURIComponent(lastSync)}`;
+            console.log(`📥 Fetching articles newer than ${lastSync}`);
+          } else {
+            console.log(`📥 First sync - fetching all articles`);
+          }
+        } catch (dbError) {
+          console.warn('Could not query recent articles:', dbError);
           console.log(`📥 First sync - fetching all articles`);
         }
         
@@ -335,33 +348,37 @@
     
     // NEW: Enforce article limit - delete oldest unsaved articles if count exceeds limit
     async function enforceArticleLimit(maxArticles) {
-      maxArticles = maxArticles || CONFIG.MAX_ARTICLES || 500;
-      
-      const unsavedCount = db.all('SELECT COUNT(*) as count FROM feed_articles WHERE saved = 0')[0].count;
-      
-      if (unsavedCount > maxArticles) {
-        const deleteCount = unsavedCount - maxArticles;
-        console.log(`⚠️ Article limit reached (${unsavedCount}/${maxArticles}). Deleting ${deleteCount} oldest articles...`);
+      try {
+        maxArticles = maxArticles || CONFIG.MAX_ARTICLES || 500;
         
-        // Delete oldest unsaved articles
-        db.run(`
-          DELETE FROM feed_articles 
-          WHERE id IN (
-            SELECT id FROM feed_articles 
-            WHERE saved = 0 
-            ORDER BY datetime(pubDate) ASC 
-            LIMIT ?
-          )
-        `, [deleteCount]);
+        const unsavedCount = db.all('SELECT COUNT(*) as count FROM feed_articles WHERE saved = 0')[0].count;
         
-        // Clean up orphaned images
-        db.run(`
-          DELETE FROM feed_images 
-          WHERE articleId NOT IN (SELECT id FROM feed_articles)
-        `);
-        
-        db.save();
-        console.log(`✓ Deleted ${deleteCount} old articles. Now at ${maxArticles} articles.`);
+        if (unsavedCount > maxArticles) {
+          const deleteCount = unsavedCount - maxArticles;
+          console.log(`⚠️ Article limit reached (${unsavedCount}/${maxArticles}). Deleting ${deleteCount} oldest articles...`);
+          
+          // Delete oldest unsaved articles (no datetime() function)
+          db.run(`
+            DELETE FROM feed_articles 
+            WHERE id IN (
+              SELECT id FROM feed_articles 
+              WHERE saved = 0 
+              ORDER BY pubDate ASC 
+              LIMIT ?
+            )
+          `, [deleteCount]);
+          
+          // Clean up orphaned images
+          db.run(`
+            DELETE FROM feed_images 
+            WHERE articleId NOT IN (SELECT id FROM feed_articles)
+          `);
+          
+          db.save();
+          console.log(`✓ Deleted ${deleteCount} old articles. Now at ${maxArticles} articles.`);
+        }
+      } catch (error) {
+        console.error('Error enforcing article limit:', error);
       }
     }
 
@@ -375,38 +392,56 @@
       
       console.log('🔄 Starting refresh - checking for new articles');
       
-      const container = document.getElementById('articlesContainer');
-      container.innerHTML = 
-        '<p class="muted text-sm" style="text-align: center; padding: var(--space-lg);">🔄 Checking for new articles...</p>';
+      // Show loading notification
+      const loadingOverlay = document.getElementById('loadingOverlay');
+      const loadingNotification = document.getElementById('loadingNotification');
+      loadingOverlay.classList.add('active');
+      loadingNotification.classList.add('active');
       
       try {
-        // Sync feeds list from server
-        await syncFromServer(true);
+        // Add timeout for the entire operation (2 minutes)
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Operation timed out. Please try again.')), 120000)
+        );
         
-        const feeds = await db.getFeeds();
-        
-        if (feeds.length === 0) {
-          alert('No feeds available. Please add feeds on the server first.\n\nGo to: https://www.hunter-stroud.com/tabink-server/');
-          await renderArticles();
-          return;
-        }
-
-        // Download new articles from server (existing ones are skipped)
-        const result = await downloadArticlesFromServer();
-        
-        if (result.saved > 0) {
-          db.save();
-          await renderArticles();
+        const refreshPromise = async () => {
+          // Sync feeds list from server
+          await syncFromServer(true);
           
-          alert(`✓ Downloaded ${result.new} new articles!\n\nLast server refresh: ${result.lastRefresh ? new Date(result.lastRefresh).toLocaleString() : 'Unknown'}`);
-        } else {
-          await renderArticles();
-          alert('No new articles found.\n\nEverything is up to date!');
-        }
+          const feeds = await db.getFeeds();
+          
+          if (feeds.length === 0) {
+            alert('No feeds available. Please add feeds on the server first.\n\nGo to: https://www.hunter-stroud.com/tabink-server/');
+            await renderArticles();
+            return;
+          }
+
+          // Download new articles from server (existing ones are skipped)
+          const result = await downloadArticlesFromServer();
+          
+          if (result.saved > 0) {
+            console.log('Saving database after downloading articles...');
+            await db.save();
+            console.log('Database saved successfully!');
+            await renderArticles();
+            
+            alert(`✓ Downloaded ${result.new} new articles!\n\nLast server refresh: ${result.lastRefresh ? new Date(result.lastRefresh).toLocaleString() : 'Unknown'}`);
+          } else {
+            await renderArticles();
+            alert('No new articles found.\n\nEverything is up to date!');
+          }
+        };
+        
+        await Promise.race([refreshPromise(), timeoutPromise]);
+        
       } catch (error) {
         console.error('Refresh error:', error);
         alert('⚠️ Refresh failed\n\n' + error.message);
         await renderArticles();
+      } finally {
+        // Hide loading notification
+        loadingOverlay.classList.remove('active');
+        loadingNotification.classList.remove('active');
       }
     }
 

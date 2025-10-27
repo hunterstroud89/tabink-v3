@@ -1065,6 +1065,55 @@ body:has(.popup-overlay.active) {
 }
 
 /* ========================================
+   LOADING NOTIFICATION
+   ======================================== */
+.notification {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg-inset);
+  border: 2px solid var(--border-color);
+  border-radius: 6px;
+  padding: var(--space-lg);
+  text-align: center;
+  z-index: 2000;
+  box-shadow: 3px 3px 8px rgba(0,0,0,0.25);
+  min-width: 250px;
+  display: none;
+}
+
+.notification.active {
+  display: block;
+}
+
+.notification-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 1999;
+  display: none;
+}
+
+.notification-overlay.active {
+  display: block;
+}
+
+.notification-title {
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-bottom: var(--space-sm);
+}
+
+.notification-message {
+  font-size: 0.9rem;
+  color: var(--ink-600);
+}
+
+/* ========================================
    TABS
    ======================================== */
 .tabs {

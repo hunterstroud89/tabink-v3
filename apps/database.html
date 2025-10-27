@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Database Browser</title>
   <link rel="stylesheet" href="../assets/style.css">
+  <script src="../cordova.js"></script>
   <script src="../lib/sql-wasm.js"></script>
   <script src="../functions/db.js"></script>
   <script src="../functions/config.js"></script>
@@ -258,6 +259,12 @@
               <div style="flex:1;cursor:pointer" onclick="uploadToServer()">
                 <strong>☁ Upload to Server</strong>
                 <div class="text-sm muted">Backup to remote server</div>
+              </div>
+            </div>
+            <div class="popup-item" id="downloadMenuItem" style="display: none;">
+              <div style="flex:1;cursor:pointer" onclick="downloadFromServer()">
+                <strong>☁ Download from Server</strong>
+                <div class="text-sm muted">Restore from remote server backup</div>
               </div>
             </div>
             <div class="popup-item">
@@ -518,8 +525,12 @@
     function checkServerConfig() {
       if (typeof CONFIG !== 'undefined' && CONFIG.SERVER_URL) {
         const uploadItem = document.getElementById('uploadMenuItem');
+        const downloadItem = document.getElementById('downloadMenuItem');
         if (uploadItem) {
           uploadItem.style.display = 'block';
+        }
+        if (downloadItem) {
+          downloadItem.style.display = 'block';
         }
       }
     }
@@ -531,7 +542,7 @@
         return;
       }
 
-      if (!confirm('Upload current database to server?')) {
+      if (!confirm('Upload current database to server?\n\nThis will replace your existing backup.')) {
         return;
       }
 
@@ -541,8 +552,8 @@
         // Export database as blob
         const data = db.db.export();
         const blob = new Blob([data], { type: 'application/x-sqlite3' });
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
-        const file = new File([blob], `tabink-backup-${timestamp}.db`, { type: 'application/x-sqlite3' });
+        // Use a fixed filename so it always overwrites the previous backup
+        const file = new File([blob], `tabink-backup.db`, { type: 'application/x-sqlite3' });
 
         // Upload to server
         const formData = new FormData();
@@ -563,6 +574,109 @@
       } catch (error) {
         console.error('Upload error:', error);
         alert('Upload failed: ' + error.message);
+      }
+    }
+    
+    // Download from server
+    async function downloadFromServer() {
+      if (!CONFIG.SERVER_URL) {
+        alert('Server URL not configured. Please set CONFIG.SERVER_URL in config.js');
+        return;
+      }
+
+      try {
+        hidePopup();
+        
+        // Fetch list of backups from server
+        const response = await fetch(`${CONFIG.SERVER_URL}/server.php?action=backups`);
+        const result = await response.json();
+
+        if (!result.success || !result.backups || result.backups.length === 0) {
+          alert('No backups found on server.');
+          return;
+        }
+
+        // Sort by timestamp (newest first)
+        const backups = result.backups.sort((a, b) => b.timestamp - a.timestamp);
+
+        // Create selection popup
+        const backupList = backups.map((backup, index) => {
+          const date = new Date(backup.timestamp * 1000);
+          const dateStr = date.toLocaleString();
+          const sizeKB = (backup.size / 1024).toFixed(2);
+          return `
+            <div class="popup-item" style="cursor:pointer" onclick="restoreBackup('${backup.filename}')">
+              <div style="flex:1">
+                <strong>${backup.filename}</strong>
+                <div class="text-sm muted">${dateStr} - ${sizeKB} KB</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        const popupHTML = `
+          <div class="popup active">
+            <div class="popup-header">
+              <h3 class="popup-title">Select Backup to Restore</h3>
+              <button class="close-btn" onclick="hidePopup()"></button>
+            </div>
+            <div class="popup-content">
+              ${backupList}
+            </div>
+          </div>
+          <div class="popup-overlay active" onclick="hidePopup()"></div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', popupHTML);
+
+      } catch (error) {
+        console.error('Download error:', error);
+        alert('Failed to fetch backups: ' + error.message);
+      }
+    }
+    
+    // Restore a specific backup
+    async function restoreBackup(filename) {
+      if (!confirm(`Restore from ${filename}?\n\nThis will replace your current database!`)) {
+        return;
+      }
+
+      try {
+        hidePopup();
+
+        // Download the backup file
+        const response = await fetch(`${CONFIG.SERVER_URL}/server.php?action=download&file=${encodeURIComponent(filename)}`);
+        
+        if (!response.ok) {
+          throw new Error('Failed to download backup');
+        }
+
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+
+        // Close existing database and create new one from backup
+        if (db.db) {
+          db.db.close();
+        }
+        
+        // Make sure SQL is initialized
+        if (!db.SQL) {
+          await db.init();
+        }
+        
+        db.db = new db.SQL.Database(uint8Array);
+        
+        // Save to IndexedDB and wait for it to complete
+        console.log('Saving restored database to IndexedDB...');
+        await db.save();
+        console.log('Database saved successfully!');
+
+        alert('✓ Database restored successfully!\n\nClick OK to refresh the page.');
+        location.reload();
+
+      } catch (error) {
+        console.error('Restore error:', error);
+        alert('Failed to restore backup: ' + error.message);
       }
     }
     
