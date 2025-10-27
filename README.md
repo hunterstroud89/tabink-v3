@@ -132,8 +132,15 @@ cordova requirements
 
 **First Launch:**
 1. App automatically creates database and adds 9 default RSS feeds
-2. Home screen shows 4 widgets: Files, Tasks, Feed, Timer
-3. Tap any widget to open that app
+2. Home screen shows widget dashboard with:
+   - App icons (Files, Tasks, Feed) in left column
+   - Today's Tasks widget (shows 5 upcoming tasks)
+   - Recent Files widget (shows 3 recent notes/sketches)
+   - Timer widget (countdown timer with presets)
+   - Recent Articles widget (latest RSS feed items)
+   - More Apps section (Docs, Settings, Database)
+   - Links section (GitHub, Server Page)
+3. Tap any widget or icon to open that app
 4. Timer widget stays in top bar (accessible from any screen)
 
 ### Files App (Notes & Sketches)
@@ -360,9 +367,11 @@ The Files app is a **unified browser** for both notes and sketches. You don't ne
 - **Feed Management**: Add, remove, and organize RSS sources
 
 ### ⏱️ Timer
-- **Simple Countdown**: Set custom timer duration
+- **Simple Countdown**: Set custom timer duration or use presets (15m, 25m, 45m)
 - **Topbar Widget**: Always accessible from any screen
+- **Persistent State**: Timer continues running even when navigating between pages
 - **Visual & Audio**: Progress display with alarm notification
+- **Start/Stop/Reset**: Full control with refresh icon for reset
 
 ### ⚙️ Settings
 - **Theme Toggle**: Light/dark mode support
@@ -778,10 +787,13 @@ Access via **Database** app (database.html):
 ### Widget System
 
 Home screen widgets provide quick access:
-- **Files Widget**: Recent 3 files with preview
-- **Tasks Widget**: Today's tasks with quick complete
-- **Feed Widget**: Latest 5 articles
-- **Timer Widget**: Topbar countdown (accessible everywhere)
+- **App Icons**: Quick launch for Files, Tasks, and Feed apps (100px square buttons)
+- **Tasks Widget**: Shows 5 upcoming tasks with checkboxes and due dates
+- **Files Widget**: Recent 3 files with creation dates and content preview
+- **Timer Widget**: Countdown timer with 15m/25m/45m presets, Start/Stop and Reset buttons
+- **Feed Widget**: Latest 5 articles from RSS feeds
+- **More Apps**: Quick access to Docs, Settings, and Database
+- **Links**: GitHub repository and Server Page shortcuts
 
 ### Smart Article Management
 
