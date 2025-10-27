@@ -10,6 +10,16 @@ A Newton MessagePad-inspired PWA featuring notes, sketches, tasks, RSS feed read
 
 ---
 
+## 📸 Screenshots
+
+![Home Screen](./assets/screenshots/home-screen.png)
+*Home screen with widget dashboard*
+
+![App Interface](./assets/screenshots/app-interface.png)
+*Files and tasks interface*
+
+---
+
 ## 📑 Table of Contents
 
 ### Quick Start

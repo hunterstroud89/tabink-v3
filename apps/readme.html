@@ -5,6 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Documentation</title>
   <link rel="stylesheet" href="../assets/style.css" />
+  <style>
+    /* Style for README images */
+    #readmeContent img {
+      max-width: 100%;
+      height: auto;
+      border: 2px solid var(--border-color);
+      margin: var(--space-md) 0;
+      display: block;
+    }
+    
+    #readmeContent em {
+      display: block;
+      text-align: center;
+      font-style: italic;
+      color: var(--text-secondary);
+      margin-top: calc(var(--space-sm) * -1);
+      margin-bottom: var(--space-md);
+    }
+  </style>
   <script src="../cordova.js"></script>
   <script src="../lib/sql-wasm.js"></script>
   <script src="../functions/db.js"></script>
@@ -71,7 +90,11 @@
           });
           
           const html = marked.parse(markdown);
-          document.getElementById('readmeContent').innerHTML = html;
+          
+          // Fix image paths - convert ./assets to ../assets for apps/ subdirectory
+          const fixedHtml = html.replace(/src="\.\/assets/g, 'src="../assets');
+          
+          document.getElementById('readmeContent').innerHTML = fixedHtml;
         } else {
           throw new Error('Marked.js library not loaded');
         }
