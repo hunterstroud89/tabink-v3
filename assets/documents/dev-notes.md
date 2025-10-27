@@ -2,7 +2,8 @@
 
 **Technical reference for Tabink development**
 
-Last updated: October 27, 2025
+Last updated: October 27, 2025  
+**Current Version: v3.0** (Released October 27, 2025)
 
 ---
 
@@ -1085,7 +1086,7 @@ git push origin feat/timer-widget
 **GitHub Pages:**
 ```bash
 git add .
-git commit -m "Release v3.0"
+git commit -m "Release v3.1"
 git push origin main
 # Auto-deploys to https://hunterstroud89.github.io/tabink-v3/
 ```
@@ -1098,12 +1099,22 @@ rm -rf www && mkdir www
 cp -R ../index.html ../manifest.json ../apps ../assets ../functions ../lib www/
 
 # Build
-cordova build android --release
+cordova build android
 
-# Sign APK (if configured)
-# Copy to releases folder
-cp platforms/android/app/build/outputs/apk/release/app-release.apk ~/Desktop/tabink-v3.0.apk
+# Copy to desktop with version number
+cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ~/Desktop/tabink-v3.1.apk
 ```
+
+**Create GitHub Release:**
+1. Go to: https://github.com/hunterstroud89/tabink-v3/releases
+2. Click "Draft a new release"
+3. Tag version: `v3.1` (or current version)
+4. Release title: `Tabink v3.1`
+5. Upload APK file
+6. Publish release
+
+**Version History:**
+- **v3.0** (Oct 27, 2025) - Complete redesign with widget dashboard, timer widget, simplified documentation
 
 ---
 
