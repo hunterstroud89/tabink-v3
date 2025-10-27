@@ -8,6 +8,8 @@ Last updated: October 27, 2025
 
 ## Table of Contents
 
+- [User Guide](#user-guide)
+- [Developer Quick Reference](#developer-quick-reference)
 - [Architecture](#architecture)
 - [Database Schema](#database-schema)
 - [Storage System](#storage-system)
@@ -19,6 +21,222 @@ Last updated: October 27, 2025
 - [Configuration](#configuration)
 - [Troubleshooting](#troubleshooting)
 - [Performance Metrics](#performance-metrics)
+- [Roadmap](#roadmap)
+- [Acknowledgments](#acknowledgments)
+
+---
+
+## User Guide
+
+### First Launch
+
+1. App automatically creates database and adds default RSS feeds
+2. Home screen shows widget dashboard:
+   - **App Icons** (Files, Tasks, Feed)
+   - **Today's Tasks** widget (5 upcoming tasks)
+   - **Recent Files** widget (3 recent notes/sketches)
+   - **Timer** widget (countdown with presets)
+   - **More Apps** section (Docs, Settings, Database)
+   - **Links** section (GitHub, Server)
+3. Tap any widget or icon to open that app
+4. Timer stays in top bar (accessible from any screen)
+
+### Files App
+
+**Create Note:** Tap "Files" → "+ New Note" → Type (auto-saves)  
+**Create Sketch:** Tap "Files" → "+ New Sketch" → Draw → Save  
+**Edit:** Tap file from widget or Files app  
+**Delete:** Tap trash icon on any file
+
+**Details:**
+- First line of note becomes the title
+- Auto-saves 500ms after you stop typing
+- Files shown in unified grid view (newest first)
+- Notes show text icon, sketches show pencil icon
+- All files stored locally - no cloud sync
+
+### Tasks App
+
+**Add Task:** Type in text box → Press Enter or "+ Add Task"  
+**Set Due Date:** Tap calendar icon → Select date  
+**Complete:** Tap checkbox (from app or widget)  
+**Delete:** Tap trash icon
+
+**Details:**
+- Date shows as "Today", "Tomorrow", or "3d" format
+- Widget shows today's tasks only
+- Tap checkbox in widget to complete without opening app
+- Tap "Clear Completed" to remove all done tasks
+
+### Feed App (RSS Reader)
+
+**Add Feed:** "Manage Feeds" → "+ Add Feed" → Paste URL → "Add"  
+**Read Article:** Tap article title in widget or Feed app  
+**Save Article:** Star icon (saved articles never auto-delete)  
+**Refresh:** Tap "↻ Refresh" (fetches only new articles)  
+**Remove Feed:** "Manage Feeds" → "Delete" → Confirm
+
+**Details:**
+- Feed widget shows latest 5 articles
+- Mark as read automatically when opened
+- Auto-cleanup: Deletes articles older than 30 days (saved articles protected)
+- Auto-limit: Keeps only 500 most recent unsaved articles
+- Incremental sync: Only new articles downloaded
+- Server caches images for faster loading
+
+### Timer
+
+**Set Timer:** Tap timer widget → Enter minutes → "Start"  
+**Presets:** Tap 15m, 25m, or 45m button (auto-starts)  
+**Controls:** Start/Stop/Reset buttons  
+**Topbar:** Shows countdown while running (works on any screen)
+
+**Details:**
+- Works on any screen (stays in top bar)
+- Shows "5:00" format while running
+- Alarm sound plays when complete
+- Timer continues even when navigating between pages
+
+### Settings
+
+**Export Database:** "Export Database" → Save file (tabink-backup-YYYY-MM-DD.db)  
+**Import Database:** "Import Database" → Select .db file (⚠️ replaces all data!)  
+**Toggle Dark Mode:** "Toggle Dark Mode" (instant apply)  
+**Check Storage:** View database size and available space
+
+**Details:**
+- Export database weekly if actively using
+- No cloud backup = device loss = data loss
+- Keep exports in multiple locations
+
+### Database App (Advanced)
+
+**Cleanup Tools:**
+1. Add Example Data - Populate with sample content for testing
+2. Cleanup Old Articles - Remove feed articles >30 days old
+3. Clear All Articles - Delete all RSS articles (keeps feeds)
+4. Clear All Notes - Delete all notes
+5. Clear All Sketches - Delete all sketches
+6. Clear Completed Tasks - Remove finished tasks only
+7. Reset All Tasks - Mark all tasks as incomplete
+8. Optimize Database - Run VACUUM to reclaim space
+
+**When to Use:**
+- Database feeling slow? Run "Optimize Database"
+- Too much storage used? Clear old articles
+- Testing? Add example data
+- Fresh start? Use individual clear buttons
+
+### Tips & Tricks
+
+**Offline Usage:**
+- All data stored locally - works without internet
+- RSS feeds require internet to refresh (but articles stay cached)
+- Install as APK for true offline app experience
+
+**Storage Management:**
+- Check Settings regularly to monitor storage
+- Sketches use most space (2-5 MB each)
+- Articles accumulate quickly (cleanup old ones)
+- Export database before major cleanup
+
+**Widgets:**
+- Home screen widgets update automatically
+- Tap widget items for quick actions
+- Timer widget accessible from any app screen
+
+**Performance:**
+- App loads in ~500ms from cache
+- Database queries typically <50ms
+- Sketches may lag on older tablets
+- Optimize database if queries slow down
+
+---
+
+## Developer Quick Reference
+
+### Build APK
+```bash
+cd /Applications/MAMP/htdocs/tabink-v3/cordova-build
+
+# Sync www folder first (critical!)
+rm -rf www && mkdir www
+cp -R ../index.html ../manifest.json ../apps ../assets ../functions ../lib www/
+
+# Build
+cordova build android
+
+# Copy to desktop
+cp platforms/android/app/build/outputs/apk/debug/app-debug.apk ~/Desktop/tabink.apk
+```
+
+### Update App Icon or Splash Screen
+1. Replace files in `cordova-build/res/`:
+   - `app-icon.png` (512x512 recommended)
+   - `splash-screen.png` (1920x1920 recommended)
+2. Run build command above
+
+### Push Changes to GitHub
+```bash
+cd /Applications/MAMP/htdocs/tabink-v3
+git add .
+git commit -m "Your commit message"
+git push origin main
+```
+
+### Test Locally
+```bash
+cd /Applications/MAMP/htdocs/tabink-v3
+python3 -m http.server 8000
+# Open http://localhost:8000
+```
+
+### View Live Website
+```
+https://hunterstroud89.github.io/tabink-v3/
+```
+
+### Important Paths
+- **Main project**: `/Applications/MAMP/htdocs/tabink-v3/`
+- **Build folder**: `/Applications/MAMP/htdocs/tabink-v3/cordova-build/`
+- **APK output**: `cordova-build/platforms/android/app/build/outputs/apk/debug/app-debug.apk`
+- **Config file**: `cordova-build/config.xml`
+
+### Environment Variables (macOS)
+```bash
+export ANDROID_HOME=$HOME/Library/Android/sdk
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools
+export PATH="/opt/homebrew/opt/openjdk@17/bin:$PATH"
+```
+
+### Common Tasks
+
+**Rebuild Android platform:**
+```bash
+cd cordova-build
+cordova platform remove android
+cordova platform add android
+cordova build android
+```
+
+**Update Cordova:**
+```bash
+npm update -g cordova
+```
+
+**Clean build cache:**
+```bash
+cd cordova-build
+rm -rf platforms/android/app/build
+cordova build android
+```
+
+**Check for errors:**
+```bash
+cd cordova-build
+cordova requirements
+```
 
 ---
 
@@ -985,7 +1203,7 @@ cp platforms/android/app/build/outputs/apk/release/app-release.apk ~/Desktop/tab
 
 ---
 
-## Future Improvements
+## Roadmap
 
 ### Planned Features
 - [ ] End-to-end encryption option
@@ -996,20 +1214,22 @@ cp platforms/android/app/build/outputs/apk/release/app-release.apk ~/Desktop/tab
 - [ ] Search across all apps
 - [ ] Data export to multiple formats (JSON, CSV, Markdown)
 
-### Technical Debt
-- [ ] Add unit tests (Jest or similar)
-- [ ] Add E2E tests (Playwright)
-- [ ] Improve error handling
-- [ ] Add loading states
-- [ ] Better offline detection
-- [ ] Accessibility audit (WCAG compliance)
+### Potential Enhancements
+- [ ] Tagging system
+- [ ] Note linking (wiki-style)
+- [ ] Pomodoro timer integration
+- [ ] Voice notes
+- [ ] PDF reader
+- [ ] Weather widget
 
-### Performance Optimizations
-- [ ] Lazy load feed images
-- [ ] Virtual scrolling for long lists
-- [ ] Web Worker for database queries
-- [ ] IndexedDB caching layer
-- [ ] Compress sketch data
+---
+
+## Acknowledgments
+
+- **ePaperCSS** by marcomattes - Base CSS framework
+- **Feather Icons** by Cole Bemis - Icon set
+- **SQL.js** by kripken - SQLite for JavaScript
+- **Newton MessagePad** - Design inspiration
 
 ---
 
@@ -1037,3 +1257,4 @@ cp platforms/android/app/build/outputs/apk/release/app-release.apk ~/Desktop/tab
 **End of Developer Documentation**
 
 *For user-facing documentation, see [README.md](../../README.md)*
+
