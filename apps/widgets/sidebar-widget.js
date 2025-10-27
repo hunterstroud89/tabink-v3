@@ -3,36 +3,10 @@
    ======================================== */
 
 window.SidebarWidget = {
-  timerInterval: null,
-  endTime: null,
-  isRunning: false,
-  
   // Initialize - restore state from localStorage
   init() {
-    const saved = localStorage.getItem('timer:state');
-    if (saved) {
-      const state = JSON.parse(saved);
-      this.endTime = state.endTime;
-      this.isRunning = state.isRunning;
-      
-      // If timer was running and hasn't expired, restart the interval
-      if (this.isRunning && this.endTime > Date.now()) {
-        this.startInterval();
-      } else if (this.endTime <= Date.now()) {
-        // Timer expired while on another page
-        this.isRunning = false;
-        this.saveState();
-      }
-    }
+    // Sidebar doesn't manage timer state anymore, TimerWidget handles it
     this.updateDisplay();
-  },
-  
-  // Save state to localStorage
-  saveState() {
-    localStorage.setItem('timer:state', JSON.stringify({
-      endTime: this.endTime,
-      isRunning: this.isRunning
-    }));
   },
   
   // Toggle sidebar
@@ -63,16 +37,16 @@ window.SidebarWidget = {
             <div style="margin-bottom: var(--space-md);">
               <label class="bold" style="display: block; margin-bottom: var(--space-sm); font-size: 0.9rem;">Quick Start</label>
               <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
-                <button onclick="SidebarWidget.setAndStart(15)">15 minutes</button>
-                <button onclick="SidebarWidget.setAndStart(25)">25 minutes</button>
-                <button onclick="SidebarWidget.setAndStart(45)">45 minutes</button>
+                <button onclick="TimerWidget.setTimer(15)">15 minutes</button>
+                <button onclick="TimerWidget.setTimer(25)">25 minutes</button>
+                <button onclick="TimerWidget.setTimer(45)">45 minutes</button>
               </div>
             </div>
             
             <!-- Controls -->
             <div style="display: flex; gap: var(--space-sm);">
-              <button id="startStopBtn" onclick="SidebarWidget.startStop()" style="flex: 1;">Start</button>
-              <button onclick="SidebarWidget.reset()">Reset</button>
+              <button id="startStopBtn" onclick="TimerWidget.toggle()" style="flex: 1;">Start</button>
+              <button onclick="TimerWidget.reset()">Reset</button>
             </div>
           </div>
           
@@ -123,6 +97,24 @@ window.SidebarWidget = {
               </div>
             </div>
           </div>
+          
+          <!-- Links -->
+          <div style="border-top: 2px solid var(--border-color); padding-top: var(--space-md); margin-top: var(--space-md);">
+            <div style="display: flex; flex-direction: column; gap: var(--space-xs); font-size: 0.85rem;">
+              <a href="https://github.com/hunterstroud89/tabink-v3" target="_blank" style="color: inherit; text-decoration: none; padding: var(--space-xs); border: 2px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-raised); display: flex; align-items: center; gap: var(--space-xs);">
+                <svg class="icon" style="width: 16px; height: 16px;">
+                  <use href="#icon-github"></use>
+                </svg>
+                <span>GitHub Repository</span>
+              </a>
+              <a href="https://www.hunter-stroud.com/tabink-server/" target="_blank" style="color: inherit; text-decoration: none; padding: var(--space-xs); border: 2px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-raised); display: flex; align-items: center; gap: var(--space-xs);">
+                <svg class="icon" style="width: 16px; height: 16px;">
+                  <use href="#icon-settings"></use>
+                </svg>
+                <span>Server Page</span>
+              </a>
+            </div>
+          </div>
         </div>
       </div>
       <div class="sidebar-overlay" onclick="SidebarWidget.close()" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 999;"></div>
@@ -153,134 +145,26 @@ window.SidebarWidget = {
     }
   },
   
-  // Set timer to specific minutes
-  setTimer(minutes) {
-    this.reset();
-    this.endTime = Date.now() + (minutes * 60 * 1000);
-    this.saveState();
-    this.updateDisplay();
-  },
-  
-  // Set timer and start it
-  setAndStart(minutes) {
-    this.setTimer(minutes);
-    if (!this.isRunning) {
-      this.startStop();
-    }
-  },
-  
-  // Start the interval (internal helper)
-  startInterval() {
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-    }
-    
-    this.timerInterval = setInterval(() => {
-      this.updateDisplay();
-      
-      const remaining = this.endTime - Date.now();
-      if (remaining <= 0) {
-        this.timerComplete();
-      }
-    }, 100);
-  },
-  
-  // Start/Stop timer
-  startStop() {
-    if (this.isRunning) {
-      // Stop
-      clearInterval(this.timerInterval);
-      this.timerInterval = null;
-      this.isRunning = false;
-      this.saveState();
-      
-      const btn = document.getElementById('startStopBtn');
-      if (btn) btn.textContent = 'Start';
-    } else {
-      // Start
-      if (!this.endTime || this.endTime <= Date.now()) {
-        this.setTimer(25); // Default 25 minutes
-      }
-      
-      this.isRunning = true;
-      this.saveState();
-      
-      const btn = document.getElementById('startStopBtn');
-      if (btn) btn.textContent = 'Stop';
-      
-      this.startInterval();
-    }
-  },
-  
-  // Reset timer
-  reset() {
-    clearInterval(this.timerInterval);
-    this.timerInterval = null;
-    this.isRunning = false;
-    this.endTime = null;
-    this.saveState();
-    
-    const btn = document.getElementById('startStopBtn');
-    if (btn) btn.textContent = 'Start';
-    
-    this.updateDisplay();
-  },
-  
-  // Timer complete
-  timerComplete() {
-    clearInterval(this.timerInterval);
-    this.timerInterval = null;
-    this.isRunning = false;
-    this.saveState();
-    
-    const btn = document.getElementById('startStopBtn');
-    if (btn) btn.textContent = 'Start';
-    
-    // Alert
-    alert('Timer Complete! ⏰');
-    
-    this.updateDisplay();
-  },
-  
-  // Update display
+  // Update display - reads from TimerWidget
   updateDisplay() {
-    const display = document.getElementById('timerDisplay');
-    const button = document.getElementById('timerButton');
+    const display = document.querySelector('.sidebar #timerDisplay');
+    const btn = document.querySelector('.sidebar #startStopBtn');
     
-    // If timer hasn't been set, show default 25:00
-    if (!this.endTime && !this.isRunning) {
-      if (display) {
-        display.textContent = '25:00';
-      }
-      if (button) {
-        button.innerHTML = `<svg class="icon" style="vertical-align: middle;"><use href="#icon-clock"></use></svg>`;
-      }
+    if (!display || !btn) return;
+    
+    // Get state from TimerWidget
+    if (!TimerWidget.endTime) {
+      display.textContent = '25:00';
+      btn.textContent = 'Start';
       return;
     }
+
+    const remaining = Math.max(0, TimerWidget.endTime - Date.now());
+    const minutes = Math.floor(remaining / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+    display.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
     
-    if (!this.endTime) {
-      this.endTime = Date.now() + (25 * 60 * 1000);
-    }
-    
-    const remaining = Math.max(0, this.endTime - Date.now());
-    const totalSeconds = Math.floor(remaining / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    
-    const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    
-    if (display) {
-      display.textContent = timeStr;
-    }
-    
-    // Update topbar button
-    if (button) {
-      if (this.isRunning && remaining > 0) {
-        button.innerHTML = `<span style="font-family: var(--font-mono); font-size: 0.85rem;">${timeStr}</span>`;
-      } else {
-        button.innerHTML = `<svg class="icon" style="vertical-align: middle;"><use href="#icon-clock"></use></svg>`;
-      }
-    }
+    btn.textContent = TimerWidget.isRunning ? 'Pause' : 'Start';
   }
 };
 

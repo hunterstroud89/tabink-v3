@@ -16,18 +16,42 @@ window.FilesWidget = {
     // Show all file types, limit to 3
     const recentFiles = files.slice(0, 3);
     
-    widget.innerHTML = recentFiles.map(file => {
+    widget.innerHTML = recentFiles.map((file, index) => {
       const icon = file.type === 'note' ? 'file-text' : 'edit';
-      const preview = file.type === 'note' ? (file.content || '').substring(0, 60) : '';
+      const isLast = index === recentFiles.length - 1;
+      
+      // Format date created
+      const dateCreated = new Date(file.createdAt);
+      const now = new Date();
+      const diffTime = Math.abs(now - dateCreated);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      let dateText = '';
+      if (diffDays === 0) {
+        dateText = 'today';
+      } else if (diffDays === 1) {
+        dateText = 'yesterday';
+      } else if (diffDays < 7) {
+        dateText = `${diffDays}d ago`;
+      } else if (diffDays < 30) {
+        dateText = `${Math.floor(diffDays / 7)}w ago`;
+      } else if (diffDays < 365) {
+        dateText = `${Math.floor(diffDays / 30)}mo ago`;
+      } else {
+        dateText = `${Math.floor(diffDays / 365)}y ago`;
+      }
       
       return `
-        <div onclick="FilesWidget.openFile('${file.id}', '${file.type}')" style="cursor: pointer; padding: var(--space-xs) 0; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: var(--space-xs);">
-          <svg class="icon" style="width: 16px; height: 16px; flex-shrink: 0;">
+        <div onclick="FilesWidget.openFile('${file.id}', '${file.type}')" style="cursor: pointer; padding: var(--space-sm) 0; ${!isLast ? 'border-bottom: 1px solid var(--border-color);' : ''} display: flex; align-items: flex-start; gap: var(--space-sm);">
+          <svg class="icon" style="width: 1.1em; height: 1.1em; flex-shrink: 0; margin-top: 0.1em;">
             <use href="#icon-${icon}"></use>
           </svg>
-          <div style="flex: 1; min-width: 0;">
-            <strong>${this.escapeHtml(file.title)}</strong>
-            ${preview ? `<div class="text-sm muted" style="margin-top: 2px;">${this.escapeHtml(preview)}${file.content && file.content.length > 60 ? '...' : ''}</div>` : ''}
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+            <div style="font-weight: 600; margin-bottom: 2px;">${this.escapeHtml(file.title)}</div>
+            <div class="text-sm muted" style="display: flex; justify-content: space-between; align-items: center; gap: var(--space-sm);">
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.escapeHtml((file.content || '').substring(0, 30))}</span>
+              <span style="flex-shrink: 0;">created ${dateText}</span>
+            </div>
           </div>
         </div>
       `;

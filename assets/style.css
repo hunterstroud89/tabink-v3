@@ -358,21 +358,21 @@ input:focus {
 }
 
 /* Checkboxes (hidden native, styled with pseudo-elements) */
-[type="checkbox"]:not(:checked):not(.toggle),
-[type="checkbox"]:checked:not(.toggle) {
+[type="checkbox"]:not(:checked):not(.toggle):not(.task-checkbox),
+[type="checkbox"]:checked:not(.toggle):not(.task-checkbox) {
   position: absolute;
   left: -9999px;
 }
 
-[type="checkbox"]:not(:checked):not(.toggle) + label,
-[type="checkbox"]:checked:not(.toggle) + label {
+[type="checkbox"]:not(:checked):not(.toggle):not(.task-checkbox) + label,
+[type="checkbox"]:checked:not(.toggle):not(.task-checkbox) + label {
   position: relative;
   padding-left: 1.5em;
   cursor: pointer;
 }
 
-[type="checkbox"]:not(:checked):not(.toggle) + label:before,
-[type="checkbox"]:checked:not(.toggle) + label:before {
+[type="checkbox"]:not(:checked):not(.toggle):not(.task-checkbox) + label:before,
+[type="checkbox"]:checked:not(.toggle):not(.task-checkbox) + label:before {
   content: '';
   position: absolute;
   left: 0;
@@ -384,8 +384,8 @@ input:focus {
   border-radius: 0;
 }
 
-[type="checkbox"]:not(:checked):not(.toggle) + label:after,
-[type="checkbox"]:checked:not(.toggle) + label:after {
+[type="checkbox"]:not(:checked):not(.toggle):not(.task-checkbox) + label:after,
+[type="checkbox"]:checked:not(.toggle):not(.task-checkbox) + label:after {
   content: '\2713\0020';
   position: absolute;
   top: 0.05em;
@@ -396,34 +396,69 @@ input:focus {
   transition: none;
 }
 
-[type="checkbox"]:not(:checked):not(.toggle) + label:after {
+[type="checkbox"]:not(:checked):not(.toggle):not(.task-checkbox) + label:after {
   opacity: 0;
   transform: scale(0);
 }
 
-[type="checkbox"]:checked:not(.toggle) + label:after {
+[type="checkbox"]:checked:not(.toggle):not(.task-checkbox) + label:after {
   opacity: 1;
   transform: scale(1);
 }
 
-[type="checkbox"]:disabled:not(:checked):not(.toggle) + label:before,
-[type="checkbox"]:disabled:checked:not(.toggle) + label:before {
+[type="checkbox"]:disabled:not(:checked):not(.toggle):not(.task-checkbox) + label:before,
+[type="checkbox"]:disabled:checked:not(.toggle):not(.task-checkbox) + label:before {
   box-shadow: none;
   border-color: var(--disabled-color);
   background-color: var(--disabled-color);
 }
 
-[type="checkbox"]:disabled:checked:not(.toggle) + label:after {
+[type="checkbox"]:disabled:checked:not(.toggle):not(.task-checkbox) + label:after {
   color: var(--disabled-color);
 }
 
-[type="checkbox"]:disabled:not(.toggle) + label {
+[type="checkbox"]:disabled:not(.toggle):not(.task-checkbox) + label {
   color: var(--disabled-color);
 }
 
-[type="checkbox"]:checked:focus:not(.toggle) + label:before,
-[type="checkbox"]:not(:checked):focus:not(.toggle) + label:before {
+[type="checkbox"]:checked:focus:not(.toggle):not(.task-checkbox) + label:before,
+[type="checkbox"]:not(:checked):focus:not(.toggle):not(.task-checkbox) + label:before {
   border: var(--border-size) dotted var(--primary-color);
+}
+
+/* Task Checkboxes (visible, styled checkboxes for tasks) */
+[type="checkbox"].task-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1.1em;
+  height: 1.1em;
+  border: var(--border-size) solid var(--primary-color);
+  background: var(--bg-primary);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+[type="checkbox"].task-checkbox:checked::before {
+  content: '\2713';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--primary-color);
+  font-size: 1em;
+  line-height: 1;
+}
+
+[type="checkbox"].task-checkbox:hover {
+  border-color: var(--primary-color);
+  opacity: 0.8;
+}
+
+[type="checkbox"].task-checkbox:focus {
+  outline: 2px dotted var(--primary-color);
+  outline-offset: 2px;
 }
 
 /* Radio Buttons (hidden native, styled with pseudo-elements) */
@@ -1317,6 +1352,7 @@ body:has(.popup-overlay.active) {
   cursor: pointer;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-md);
   width: 100%;
   font-weight: 500;

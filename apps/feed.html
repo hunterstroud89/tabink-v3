@@ -33,7 +33,12 @@
       <span onclick="showFeedMenu()" style="cursor: pointer;">Feed ▼</span>
     </div>
     <div class="topbar-actions">
-      <button id="refreshBtn" onclick="refreshFeeds()">↻ Refresh</button>
+      <button id="refreshBtn" onclick="refreshFeeds()">
+        <svg class="icon" style="vertical-align: middle;">
+          <use href="#icon-refresh"></use>
+        </svg>
+        Refresh
+      </button>
       <button onclick="showManageFeedsPopup()">⚙ Feeds</button>
     </div>
   </div>

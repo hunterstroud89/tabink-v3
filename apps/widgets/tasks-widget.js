@@ -9,7 +9,7 @@ window.TasksWidget = {
       const tasks = await db.getTasks();
       if (!tasks || tasks.length === 0) return;
       
-      const incompleteTasks = tasks.filter(t => !t.completed).slice(0, 4);
+      const incompleteTasks = tasks.filter(t => !t.completed).slice(0, 5);
       
       if (incompleteTasks.length === 0) {
         document.getElementById('tasksWidget').innerHTML = 
@@ -26,21 +26,15 @@ window.TasksWidget = {
           } else {
             dueDateText = `<span class="date-badge" style="cursor: pointer; margin-left: auto; opacity: 0.4;" onclick="TasksWidget.editTaskDate('${task.id}', event)">+ date</span>`;
           }
-          return `<li>
-            <input type="checkbox" id="widget-task-${task.id}" onchange="TasksWidget.toggleTask('${task.id}')" />
-            <label for="widget-task-${task.id}" style="flex: 1; cursor: pointer;">${this.escapeHtml(task.text)}</label>
+          return `<li style="padding: var(--space-sm) 0; border-bottom: 2px dashed var(--border-color); display: flex; align-items: flex-start; gap: var(--space-sm);">
+            <input type="checkbox" class="task-checkbox" id="widget-task-${task.id}" ${task.completed ? 'checked' : ''} onchange="TasksWidget.toggleTask('${task.id}')" style="margin-top: 0.1em;" />
+            <span style="flex: 1; font-weight: 600; min-width: 0; cursor: pointer;" onclick="TasksWidget.editTaskText('${task.id}', event)">${this.escapeHtml(task.text)}</span>
             ${dueDateText}
           </li>`;
         }).join('') + 
         '</ul>';
       
       document.getElementById('tasksWidget').innerHTML = tasksHTML;
-      
-      const totalIncomplete = tasks.filter(t => !t.completed).length;
-      if (totalIncomplete > 4) {
-        document.getElementById('tasksWidget').innerHTML += 
-          `<p class="muted text-sm" style="margin-top: var(--space-sm); text-align: center; cursor: pointer;" onclick="window.location.href='apps/tasks.html'">+${totalIncomplete - 4} more tasks</p>`;
-      }
     } catch (e) {
       console.error('Error loading tasks widget:', e);
     }
@@ -99,6 +93,70 @@ window.TasksWidget = {
     if (task) {
       await db.updateTask(id, { completed: !task.completed });
       this.load();
+    }
+  },
+
+  // Edit task text
+  async editTaskText(taskId, event) {
+    event.stopPropagation();
+    
+    const tasks = await db.getTasks();
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    const popupHTML = `
+      <div class="popup active" style="max-width: 500px;">
+        <div class="popup-header" style="padding: var(--space-sm) var(--space-md); min-height: auto;">
+          <h3 class="popup-title" style="font-size: 1rem; margin: 0;">Edit Task</h3>
+          <button class="close-btn" onclick="hidePopup()"></button>
+        </div>
+        <div class="popup-content" style="padding: var(--space-md);">
+          <input type="text" 
+                 id="editTaskInput" 
+                 value="${this.escapeHtml(task.text)}"
+                 style="width: 100%; padding: var(--space-sm); font-size: 16px; border: 2px solid var(--border-color); border-radius: var(--radius-sm); font-family: var(--font-sans);"
+                 onkeypress="if(event.key==='Enter') TasksWidget.saveTaskText('${taskId}')">
+        </div>
+        <div class="popup-footer" style="flex-wrap: wrap; gap: var(--space-xs);">
+          <button onclick="TasksWidget.deleteTask('${taskId}')" style="background: none; border: none; cursor: pointer; font-family: var(--font-sans) !important; color: inherit; text-decoration: underline; padding: 0;">Delete</button>
+          <span style="flex: 1;"></span>
+          <span style="flex-shrink: 0; white-space: nowrap;">
+            <button onclick="hidePopup()" style="background: none; border: none; cursor: pointer; font-family: var(--font-sans) !important; color: inherit; text-decoration: underline; padding: 0;">Cancel</button>
+             • <button onclick="TasksWidget.saveTaskText('${taskId}')" style="background: none; border: none; cursor: pointer; font-family: var(--font-sans) !important; color: inherit; text-decoration: underline; padding: 0; font-weight: bold;">Save</button>
+          </span>
+        </div>
+      </div>
+      <div class="popup-overlay active" onclick="hidePopup()"></div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', popupHTML);
+    
+    // Focus and select the input
+    setTimeout(() => {
+      const input = document.getElementById('editTaskInput');
+      input.focus();
+      input.select();
+    }, 100);
+  },
+
+  // Save task text
+  async saveTaskText(taskId) {
+    const input = document.getElementById('editTaskInput');
+    const text = input.value.trim();
+    
+    if (!text) return;
+    
+    await db.updateTask(taskId, { text });
+    hidePopup();
+    await this.load();
+  },
+
+  // Delete task
+  async deleteTask(taskId) {
+    if (confirm('Delete this task?')) {
+      await db.deleteTask(taskId);
+      hidePopup();
+      await this.load();
     }
   },
 
